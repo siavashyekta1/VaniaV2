@@ -37,6 +37,7 @@ from vania_core.profession_policy import (
     sanitize_expert_case_payload,
 )
 from vania_core.profile_snapshots import get_expert_profile_payload, get_visitor_base_profile_payload
+from vania_core.patient_service import PatientDataService
 from vania_core.schemas import TherapyPhase
 from vania_core.services import AppendixService, ProfileService, RoadmapService, SessionService, TaskService
 from vania_core.case_files_service import CaseFilesService
@@ -963,7 +964,7 @@ async def finalize_session_report(
         "flashcards": normalized_flashcards,
     }
     storage_doctor_id = int(active_case.get("doctor_id") or doctor.id)
-    await sync_to_async(RoadmapService.ensure_session)(
+    target_session = await sync_to_async(RoadmapService.ensure_session)(
         patient,
         session_number=session_number,
         title=topic or f"جلسه {session_number}",
@@ -972,11 +973,30 @@ async def finalize_session_report(
         doctor_id=storage_doctor_id,
         case_id=active_case["id"],
     )
-    log_entry = await sync_to_async(SessionService.log_session)(
-        patient, doctor, json.dumps(payload, ensure_ascii=False), private_notes, None, storage_doctor_id, active_case["id"]
+    log_entry = await sync_to_async(SessionService.save_structured_report)(
+        patient=patient,
+        doctor=doctor,
+        summary=json.dumps(payload, ensure_ascii=False),
+        private_notes=private_notes,
+        doctor_id=storage_doctor_id,
+        case_id=active_case["id"],
+        entry_id=target_session.doc_id,
     )
     await sync_to_async(RoadmapService.complete_session)(patient, session_number, str(log_entry.id), storage_doctor_id, active_case["id"])
     await sync_to_async(CaseService.touch_case)(patient, storage_doctor_id, active_case["id"])
+    try:
+        await sync_to_async(PatientDataService.refresh_patient_dashboard_canvas)(
+            patient,
+            storage_doctor_id,
+            active_case["id"],
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to refresh visitor dashboard after finalizing session %s for patient %s: %s",
+            session_number,
+            patient.id,
+            exc,
+        )
     yield await _emit_canvas_refresh(run_context, patient, doctor, active_case["id"])
     yield f"✅ Session {session_number} report finalized."
 

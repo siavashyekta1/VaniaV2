@@ -5,7 +5,7 @@ Billing APIs live under:
 ```text
 /api/billing/
 ```
-
+ 
 They expose billing config, storefront products, invoices, payment callbacks, discounts, manual payment, FAQ, and transaction history.
 
 ## Endpoint Table

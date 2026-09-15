@@ -69,7 +69,6 @@ from users.models import CustomUser, UserContextEntry
 from users.roles import CANONICAL_EXPERT_SLUG, has_visitor_features, is_expert, normalize_role_slug
 from capabilities.vania_visitor.forms import FORM_BASE_PROFILE
 from .case_service import CaseService
-from services.models_canvas import CanvasInstance
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -1755,6 +1754,18 @@ class TaskManagementView(APIView):
     
 class SessionManagementView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctorUser]
+
+    @staticmethod
+    def _refresh_entry_timeline(entry):
+        data = entry.data if isinstance(entry.data, dict) else {}
+        doctor_id = data.get("doctor_id")
+        case_id = data.get("case_id")
+        if doctor_id and case_id:
+            PatientDataService.refresh_patient_session_timeline_canvas(
+                entry.user,
+                int(doctor_id),
+                case_id,
+            )
     
     def post(self, request):
         patient_id = request.data.get('visitor_id') or request.data.get('patient_id')
@@ -1769,22 +1780,33 @@ class SessionManagementView(APIView):
         if case_id and not CaseService.expert_can_edit_case(patient, request.user, case_id):
             return Response({"error": "This case is read-only for you."}, status=403)
             
-        SessionService.log_session(patient, request.user, summary, private_notes, doctor_id=request.user.id, case_id=case_id)
+        entry = SessionService.log_session(
+            patient,
+            request.user,
+            summary,
+            private_notes,
+            doctor_id=request.user.id,
+            case_id=case_id,
+        )
+        self._refresh_entry_timeline(entry)
         return Response({"status": "created"}, status=status.HTTP_201_CREATED)
     
     def put(self, request, entry_id):
         summary = request.data.get('summary')
         private_notes = request.data.get('private_notes', '')
         date = request.data.get('date')
-        
+        entry = get_object_or_404(UserContextEntry, pk=entry_id, definition__key=SessionService.CONTEXT_KEY)
         success = SessionService.update_session(entry_id, request.user, summary, private_notes, date)
         if success:
+            self._refresh_entry_timeline(entry)
             return Response({"status": "updated"})
         return Response({"error": "Update failed"}, status=400)
     
     def delete(self, request, entry_id):
+        entry = get_object_or_404(UserContextEntry, pk=entry_id, definition__key=SessionService.CONTEXT_KEY)
         success = SessionService.delete_session(entry_id, request.user)
         if success:
+            self._refresh_entry_timeline(entry)
             return Response({"status": "deleted"})
         return Response({"error": "Delete failed"}, status=400)
 
@@ -2077,18 +2099,7 @@ class SessionReportView(APIView):
     @staticmethod
     def _refresh_visitor_dashboard_canvas(patient, doctor_id: int, case_id: Optional[str]):
         try:
-            payload = PatientDataService.get_patient_dashboard_snapshot(patient, doctor_id=doctor_id, case_id=case_id)
-            canvas = CanvasInstance.objects.filter(
-                session_id=f"visitor-dashboard-{patient.id}",
-                canvas_def__component_key="VANIA_PATIENT_JOURNEY",
-            ).first()
-            if not canvas or not isinstance(canvas.current_state, dict):
-                return
-
-            next_state = dict(canvas.current_state)
-            next_state.update(payload)
-            canvas.current_state = next_state
-            canvas.save(update_fields=["current_state", "last_modified_at"])
+            PatientDataService.refresh_patient_dashboard_canvas(patient, doctor_id, case_id)
         except Exception as exc:
             logger.warning("Failed to refresh visitor dashboard canvas for patient %s: %s", patient.id, exc)
 
@@ -2175,35 +2186,16 @@ class SessionReportView(APIView):
             # We preserve existing smart_goals/swot if we are just editing the text
         }
 
-        log_entry = None
-
         # 3. Update Existing or Create New
-        if target_session.doc_id:
-            try:
-                log_entry = UserContextEntry.objects.get(pk=target_session.doc_id)
-                
-                # Merge existing data so we don't wipe SWOT/Goals if they exist
-                current_data = log_entry.data if isinstance(log_entry.data, dict) else {}
-                current_data.update(rich_payload)
-                
-                log_entry.data = current_data
-                log_entry.data['summary'] = json.dumps(current_data, ensure_ascii=False) # Keep summary field compatible
-                log_entry.data['private_notes'] = private_notes
-                log_entry.save()
-            except UserContextEntry.DoesNotExist:
-                # Fallback to create new if ID was bad
-                pass
-
-        if not log_entry:
-            # Create new log
-            log_entry = SessionService.log_session(
-                patient=patient,
-                doctor=request.user,
-                summary=json.dumps(rich_payload, ensure_ascii=False),
-                private_notes=private_notes,
-                doctor_id=request.user.id,
-                case_id=case_id,
-            )
+        log_entry = SessionService.save_structured_report(
+            patient=patient,
+            doctor=request.user,
+            summary=json.dumps(rich_payload, ensure_ascii=False),
+            private_notes=private_notes,
+            doctor_id=request.user.id,
+            case_id=case_id,
+            entry_id=target_session.doc_id,
+        )
 
         # 4. Ensure Roadmap is updated (Status -> COMPLETED, Link Doc ID)
         RoadmapService.complete_session(patient, int(session_number), str(log_entry.id), doctor_id=request.user.id, case_id=case_id)

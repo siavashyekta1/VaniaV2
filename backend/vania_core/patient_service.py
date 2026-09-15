@@ -102,6 +102,79 @@ class PatientDataService:
         }
 
     @staticmethod
+    def refresh_patient_dashboard_canvas(patient, doctor_id: int, case_id: Optional[str]) -> bool:
+        from services.models_canvas import CanvasInstance
+
+        payload = PatientDataService.get_patient_dashboard_snapshot(
+            patient,
+            doctor_id=doctor_id,
+            case_id=case_id,
+        )
+        canvas = CanvasInstance.objects.filter(
+            session_id=f"visitor-dashboard-{patient.id}",
+            canvas_def__component_key="VANIA_PATIENT_JOURNEY",
+        ).first()
+        if not canvas or not isinstance(canvas.current_state, dict):
+            return False
+
+        next_state = dict(canvas.current_state)
+        next_state.update(payload)
+        canvas.current_state = next_state
+        canvas.save(update_fields=["current_state", "last_modified_at"])
+        return True
+
+    @staticmethod
+    def refresh_patient_session_timeline_canvas(
+        patient,
+        doctor_id: int,
+        case_id: str,
+        *,
+        save: bool = True,
+    ) -> dict:
+        from services.models_canvas import CanvasInstance
+
+        canvas = CanvasInstance.objects.filter(
+            session_id=f"visitor-dashboard-{patient.id}",
+            canvas_def__component_key="VANIA_PATIENT_JOURNEY",
+        ).first()
+        if not canvas or not isinstance(canvas.current_state, dict):
+            return {"found": False, "changed": False, "before": None, "after": None}
+
+        history = SessionService.get_patient_history(
+            patient,
+            viewer_role="PATIENT",
+            doctor_id=doctor_id,
+            case_id=case_id,
+        )
+        current_state = dict(canvas.current_state)
+        current_timeline = (
+            current_state.get("timeline")
+            or (current_state.get("selected_case") or {}).get("timeline")
+            or []
+        )
+        current_ids = [item.get("id") for item in current_timeline if isinstance(item, dict)]
+        next_ids = [item.get("id") for item in history if isinstance(item, dict)]
+        selected_case = dict(current_state.get("selected_case") or {})
+        active_goals = PatientDataService._extract_active_goals_from_history(history)
+        changed = current_ids != next_ids
+
+        if changed and save:
+            current_state["timeline"] = history
+            current_state["active_goals"] = active_goals
+            selected_case["timeline"] = history
+            selected_case["active_goals"] = active_goals
+            current_state["selected_case"] = selected_case
+            canvas.current_state = current_state
+            canvas.save(update_fields=["current_state", "last_modified_at"])
+
+        return {
+            "found": True,
+            "changed": changed,
+            "before": len(current_timeline),
+            "after": len(history),
+        }
+
+    @staticmethod
     def _extract_active_goals_from_history(history) -> list[str]:
         for item in history or []:
             goals = item.get("smart_goals")
