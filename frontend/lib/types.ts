@@ -73,6 +73,7 @@ export interface UserData {
   is_expert_verified?: boolean;
   expert_profession_slug?: string | null;
   expert_profession_label?: string | null;
+  has_all_expert_access?: boolean;
   expert_verification_status?: 'none' | 'pending' | 'approved' | 'rejected';
   expert_verification_message?: string | null;
   expert_verification_requested_at?: string | null;

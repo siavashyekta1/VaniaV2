@@ -146,6 +146,9 @@ export async function getExpertProfessions() {
     credential_placeholder?: string;
     credential_help?: string;
     sample_code?: string;
+    university_required?: boolean;
+    university_label?: string;
+    university_placeholder?: string;
   }>>('/api/auth/expert-professions/');
 }
 
@@ -153,7 +156,8 @@ export async function upgradeExpert(
   fullName: string,
   professionSlug: string,
   credentialCode: string,
-  nationalCode: string
+  nationalCode: string,
+  universityName: string = ""
 ) {
   return fetcher<{
     verified: boolean;
@@ -170,6 +174,7 @@ export async function upgradeExpert(
       profession_slug: professionSlug,
       credential_code: credentialCode,
       national_code: nationalCode,
+      university_name: universityName,
     }),
   });
 }

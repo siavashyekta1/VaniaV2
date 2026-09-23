@@ -8,6 +8,7 @@ from billing.models import UserWallet
 from billing.forms import UserWalletAdminForm
 from billing.admin_exports import ExportAllWhenNoSelectionMixin, export_users_csv
 from billing.services import activate_default_expert_plan_for_transferred_credits
+from services.access_service import access_service
 from vania_core.models import RoleVerificationRequest
 from .roles import CANONICAL_EXPERT_SLUG, normalize_role_slug
 
@@ -76,16 +77,27 @@ class CustomUserAdmin(ExportAllWhenNoSelectionMixin, UserAdmin):
         'submitted_credential_code',
         'is_verified_doctor',
         'is_expert_verified',
+        'has_all_expert_access',
         'date_joined',
     )
-    list_filter = ('role', 'expert_profession', 'is_verified_doctor', 'is_expert_verified', 'is_staff', 'is_active')
+    list_filter = ('role', 'expert_profession', 'is_verified_doctor', 'is_expert_verified', 'has_all_expert_access', 'is_staff', 'is_active')
     search_fields = ('phone_number', 'full_name', 'email', 'national_code')
     ordering = ('-date_joined',)
     
     fieldsets = (
         (None, {'fields': ('phone_number', 'password')}),
         ('Personal info', {'fields': ('full_name', 'email', 'national_code', 'role')}),
-        ('Doctor Info', {'fields': ('expert_profession', 'medical_license', 'is_verified_doctor', 'is_expert_verified', 'expert_verified_at', 'expert_verification_meta')}),
+        ('Doctor Info', {
+            'fields': (
+                'expert_profession',
+                'medical_license',
+                'is_verified_doctor',
+                'is_expert_verified',
+                'has_all_expert_access',
+                'expert_verified_at',
+                'expert_verification_meta',
+            ),
+        }),
         ('Set New Password', {
             'fields': ('admin_new_password1', 'admin_new_password2'),
             'description': 'Use these fields to manually set a new password for this user.',
@@ -99,7 +111,7 @@ class CustomUserAdmin(ExportAllWhenNoSelectionMixin, UserAdmin):
             'fields': (
                 'phone_number', 'password1', 'password2',
                 'full_name', 'email', 'national_code', 'role', 'expert_profession',
-                'is_active', 'is_staff', 'is_superuser', 'groups',
+                'has_all_expert_access', 'is_active', 'is_staff', 'is_superuser', 'groups',
             ),
         }),
     )
@@ -114,6 +126,9 @@ class CustomUserAdmin(ExportAllWhenNoSelectionMixin, UserAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
+
+        if "has_all_expert_access" in getattr(form, "changed_data", []):
+            access_service.bump_user_cache_version(obj.id)
 
         admin_new_password = form.cleaned_data.get("admin_new_password1") if hasattr(form, "cleaned_data") else None
         if admin_new_password:
@@ -134,6 +149,7 @@ class CustomUserAdmin(ExportAllWhenNoSelectionMixin, UserAdmin):
             "national_code": meta.get("submitted_national_code") or getattr(obj, "national_code", None),
             "full_name": getattr(obj, "full_name", None),
             "validation_kind": meta.get("validation_kind"),
+            "university_name": meta.get("submitted_university_name"),
         }
 
         latest_request = (

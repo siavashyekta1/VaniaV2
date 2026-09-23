@@ -3,7 +3,7 @@ from django.test import TestCase, override_settings
 from definitions.sync import DefinitionSync
 from definitions.agents import AGENTS
 from services.models import AgentService
-from users.models import CustomUser
+from users.models import CustomUser, ExpertProfession
 
 
 class DefinitionSyncAdminTests(TestCase):
@@ -49,3 +49,18 @@ class DefinitionSyncAgentPromptTests(TestCase):
         DefinitionSync.sync_agents(prompt_slugs={slug})
         service.refresh_from_db()
         self.assertEqual(service.system_prompt, code_prompt)
+
+
+class DefinitionSyncProfessionTests(TestCase):
+    def test_sync_creates_manual_psychology_student_profession(self):
+        DefinitionSync.sync_expert_professions()
+
+        profession = ExpertProfession.objects.get(slug="psychology_student")
+        self.assertEqual(profession.name, "دانشجوی روان‌شناسی")
+        self.assertEqual(profession.validation_kind, "manual_psychology_student")
+        self.assertTrue(profession.validation_config["university_required"])
+
+    def test_supervisor_agent_includes_psychology_students(self):
+        supervisor = next(agent for agent in AGENTS if agent.slug == "supervisor-mashaghel")
+
+        self.assertIn("psychology_student", supervisor.eligible_expert_professions)

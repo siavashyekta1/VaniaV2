@@ -5,7 +5,7 @@ import requests
 from rest_framework.test import APIClient
 
 from users.models import CustomUser, ExpertProfession, UserRole
-from vania_core.models import RoleVerificationRequest
+from vania_core.models import DoctorProfile, RoleVerificationRequest
 
 
 class UpgradeExpertViewTests(TestCase):
@@ -38,6 +38,13 @@ class UpgradeExpertViewTests(TestCase):
             is_active=True,
             validation_kind="mock_general_doctor",
             validation_config={"accepted_codes": ["123456"]},
+        )
+        self.psychology_student = ExpertProfession.objects.create(
+            slug="psychology_student",
+            name="دانشجوی روان‌شناسی",
+            is_active=True,
+            validation_kind="manual_psychology_student",
+            validation_config={"university_required": True},
         )
 
     def _payload(self, profession_slug: str, credential_code: str) -> dict:
@@ -132,6 +139,47 @@ class UpgradeExpertViewTests(TestCase):
         self.assertEqual(self.user.role.slug, "expert")
         self.assertEqual(self.user.expert_profession_id, self.psychiatrist.id)
         self.assertEqual(self.user.expert_verification_meta.get("status"), "approved")
+
+    def test_psychology_student_requires_university_name(self):
+        response = self.client.post(
+            "/api/auth/upgrade-expert/",
+            self._payload("psychology_student", "STU-778899"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["detail"], "university_name is required.")
+
+    def test_psychology_student_submission_waits_for_admin_approval(self):
+        payload = {
+            **self._payload("psychology_student", "STU-778899"),
+            "university_name": "دانشگاه تهران",
+        }
+
+        response = self.client.post("/api/auth/upgrade-expert/", payload, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.is_expert_verified)
+        self.assertEqual(self.user.expert_profession_id, self.psychology_student.id)
+        self.assertEqual(
+            self.user.expert_verification_meta.get("submitted_university_name"),
+            "دانشگاه تهران",
+        )
+        verification_request = RoleVerificationRequest.objects.get(user=self.user)
+        self.assertEqual(verification_request.status, RoleVerificationRequest.Status.PENDING)
+        self.assertEqual(verification_request.data["credential_code"], "STU-778899")
+        self.assertEqual(verification_request.data["national_code"], "0084575948")
+        self.assertEqual(verification_request.data["university_name"], "دانشگاه تهران")
+
+        verification_request.status = RoleVerificationRequest.Status.APPROVED
+        verification_request.save()
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.is_expert_verified)
+        self.assertFalse(self.user.is_verified_doctor)
+        self.assertEqual(self.user.role.slug, "expert")
+        self.assertEqual(self.user.expert_profession.slug, "psychology_student")
+        self.assertFalse(DoctorProfile.objects.filter(user=self.user).exists())
 
     def test_staff_user_can_select_expert_profession_without_verification(self):
         self.user.is_staff = True
