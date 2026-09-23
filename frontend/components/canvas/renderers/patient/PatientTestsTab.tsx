@@ -677,21 +677,27 @@ export function PatientTestsTab({
 
                 <div className="grid gap-2">
                   {activeQuestion.answers.map((answer) => {
-                    const selected = activeAttempt.answers?.[String(activeQuestion.row)] === String(answer.value);
-                    return (
-                      <Button
-                        key={`${activeQuestion.row}-${answer.value}`}
-                        type="button"
-                        variant={selected ? "secondary" : "outline"}
-                        disabled={!!savingAnswerValue}
-                        className="h-auto min-h-11 justify-start whitespace-normal px-3 py-2 text-right text-xs leading-6"
-                        onClick={() => saveInteractiveAnswer(activeQuestion, String(answer.value))}
-                      >
-                        {savingAnswerValue === `${activeQuestion.row}-${answer.value}` ? <Loader2 className="ml-2 h-3.5 w-3.5 animate-spin" /> : null}
-                        {answer.title}
-                      </Button>
-                    );
-                  })}
+                      const answerRow = String(answer.row);
+                      const selected =
+                        activeAttempt.answers?.[String(activeQuestion.row)] ===
+                        answerRow;
+                      return (
+                        <Button
+                          key={`${activeQuestion.row}-${answer.row}-${answer.value}`}
+                          type="button"
+                          variant={selected ? "secondary" : "outline"}
+                          disabled={!!savingAnswerValue}
+                          className="h-auto min-h-11 justify-start px-3 py-2 text-right text-xs leading-6 whitespace-normal"
+                          onClick={() => saveInteractiveAnswer(activeQuestion, answerRow)}
+                        >
+                          {savingAnswerValue ===
+                          `${activeQuestion.row}-${answerRow}` ? (
+                            <Loader2 className="ml-2 h-3.5 w-3.5 animate-spin" />
+                          ) : null}
+                          {answer.title}
+                        </Button>
+                      );
+                    })}
                 </div>
 
                 <div className="flex items-center justify-between gap-2">

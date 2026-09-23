@@ -456,23 +456,24 @@ export default function EsanjTestsPage() {
 
                 <div className="grid gap-2">
                   {currentQuestion.answers.map((answer) => {
-                    const selected = activeAttempt.answers?.[String(currentQuestion.row)] === String(answer.value);
-                    return (
-                      <button
-                        key={`${currentQuestion.row}-${answer.row}`}
-                        type="button"
-                        onClick={() => saveAnswer(currentQuestion.row, String(answer.value))}
-                        className={cn(
-                          "flex min-h-12 w-full items-center justify-between rounded-md border px-4 py-3 text-right text-sm transition-colors",
-                          "hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          selected ? "border-primary bg-primary/10 text-primary" : "bg-background"
-                        )}
-                      >
-                        <span className="leading-7">{answer.title}</span>
-                        {selected && <CheckCircle2 className="h-4 w-4 shrink-0" />}
-                      </button>
-                    );
-                  })}
+                      const answerRow = String(answer.row);
+                      const selected = activeAttempt.answers?.[String(currentQuestion.row)] === answerRow;
+                      return (
+                        <button
+                          key={`${currentQuestion.row}-${answer.row}`}
+                          type="button"
+                          onClick={() => saveAnswer(currentQuestion.row, answerRow)}
+                          className={cn(
+                            "flex min-h-12 w-full items-center justify-between rounded-md border px-4 py-3 text-right text-sm transition-colors",
+                            "hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            selected ? "border-primary bg-primary/10 text-primary" : "bg-background"
+                          )}
+                        >
+                          <span className="leading-7">{answer.title}</span>
+                          {selected && <CheckCircle2 className="h-4 w-4 shrink-0" />}
+                        </button>
+                      );
+                    })}
                 </div>
 
                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">

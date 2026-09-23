@@ -11,7 +11,7 @@ from ..base import (
 
 
 AGENT_PROMPT = """
-فال قهوه و تفسیر روانشناسی 
+تفسیر رورشاخ لکه های قهوه
 
 تمامی پاسخ ها  را به زبان فارسی  تبدیل کنید؛  فال قهوه جنبه سرگرمی دارد ولی برای تفسیر و تحلیل از رویکردهای پیشنهادی استفاده شود.
 
@@ -613,8 +613,8 @@ AGENT_PROMPT = """
 
 AGENT = AgentDef(
     slug="fal",
-    name="فال قهوه و تفسیر روانشناسی",
-    description="تحلیل روانشناسی فال",
+    name="تفسیر رورشاخ لکه های قهوه",
+    description="تفسیر روان‌شناختی لکه‌ها و تصاویر قهوه",
     is_free=True,
     audience="ALL",    #ALL #VISITOR #EXPERT
     eligible_expert_professions=[],    #lawyer    #psychiatrist    #psychologist
@@ -651,4 +651,3 @@ AGENT = AgentDef(
 )
 
 AGENTS = [AGENT]
-
