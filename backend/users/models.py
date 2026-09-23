@@ -99,6 +99,10 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     is_expert_verified = models.BooleanField(default=False)
     expert_verified_at = models.DateTimeField(null=True, blank=True)
     expert_verification_meta = models.JSONField(default=dict, blank=True)
+    has_all_expert_access = models.BooleanField(
+        default=False,
+        help_text="Grant access to every active expert assistant regardless of profession or plan inclusion.",
+    )
 
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)

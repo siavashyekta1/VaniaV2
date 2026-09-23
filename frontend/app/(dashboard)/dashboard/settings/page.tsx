@@ -109,7 +109,7 @@ function DoctorPublicProfileSection({ user }: { user: any }) {
 
   // 1. Guard Clause: Only show for doctors
   // We check role_slug (preferred) or role name fallback
-  const isDoctor = hasExpertFeatures(user);
+  const isDoctor = hasExpertFeatures(user) && user?.expert_profession_slug !== "psychology_student";
   
   if (!isDoctor) return null;
 
@@ -193,6 +193,9 @@ type ExpertProfessionOption = {
   credential_label?: string;
   credential_placeholder?: string;
   validation_kind?: string;
+  university_required?: boolean;
+  university_label?: string;
+  university_placeholder?: string;
 };
 
 function AdminExpertProfessionSection({ user, refreshUser }: { user: any, refreshUser: () => Promise<any> }) {
@@ -310,6 +313,7 @@ function DoctorUpgradeSection({ user, refreshUser }: { user: any, refreshUser: (
   const [welcomeProfession, setWelcomeProfession] = useState("")
   const [credentialCode, setCredentialCode] = useState("")
   const [nationalCode, setNationalCode] = useState("")
+  const [universityName, setUniversityName] = useState("")
   const [professions, setProfessions] = useState<ExpertProfessionOption[]>([])
   const [selectedProfession, setSelectedProfession] = useState<string>("")
   const [loading, setLoading] = useState(false)
@@ -390,6 +394,10 @@ function DoctorUpgradeSection({ user, refreshUser }: { user: any, refreshUser: (
       toast.error("کد ملی معتبر نیست");
       return;
     }
+    if (selectedProfessionOption?.university_required && universityName.trim().length < 2) {
+      toast.error("نام دانشگاه را وارد کنید");
+      return;
+    }
 
     setLoading(true)
     try {
@@ -397,7 +405,8 @@ function DoctorUpgradeSection({ user, refreshUser }: { user: any, refreshUser: (
         user?.full_name || "",
         selectedProfession,
         credentialCode,
-        normalizeNationalCodeDigits(nationalCode)
+        normalizeNationalCodeDigits(nationalCode),
+        universityName.trim()
       )
       toast.success(res.message || "درخواست شما ثبت شد.")
       await refreshUser()
@@ -405,6 +414,7 @@ function DoctorUpgradeSection({ user, refreshUser }: { user: any, refreshUser: (
       setIsWelcomeOpen(true)
       setIsOpen(false)
       setCredentialCode("")
+      setUniversityName("")
       setNationalCode(normalizeNationalCodeDigits(nationalCode))
     } catch(e) {
       toast.error("اعتبارسنجی ناموفق بود")
@@ -547,7 +557,7 @@ function DoctorUpgradeSection({ user, refreshUser }: { user: any, refreshUser: (
                 <div className="grid gap-3 w-full">
                   {!!professions.length && (
                     <Tabs value={selectedProfession} onValueChange={setSelectedProfession} className="w-full">
-                      <TabsList className="w-full h-auto p-1 grid grid-cols-4 gap-1 rounded-xl bg-muted/70">
+                      <TabsList className="w-full h-auto p-1 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-1 rounded-xl bg-muted/70">
                         {professions.map((profession) => (
                           <TabsTrigger
                             key={profession.slug}
@@ -598,6 +608,20 @@ function DoctorUpgradeSection({ user, refreshUser }: { user: any, refreshUser: (
                       className="bg-background text-center font-mono h-9 text-sm"
                     />
                   </div>
+                  {selectedProfessionOption?.university_required && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="expert-university-input" className="text-xs text-muted-foreground">
+                        {selectedProfessionOption.university_label || "نام دانشگاه"}
+                      </Label>
+                      <Input
+                        id="expert-university-input"
+                        value={universityName}
+                        onChange={(e) => setUniversityName(e.target.value)}
+                        placeholder={selectedProfessionOption.university_placeholder || "نام دانشگاه محل تحصیل را وارد کنید"}
+                        className="bg-background h-9 text-sm"
+                      />
+                    </div>
+                  )}
                   <Button 
                     onClick={handleVerify} 
                     disabled={loading} 

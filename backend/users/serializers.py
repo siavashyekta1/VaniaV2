@@ -167,6 +167,7 @@ class UserSerializer(serializers.ModelSerializer):
             'is_staff', 'is_superuser',
             'role_label', 'role_slug', 'national_code', 'medical_license', 'is_verified_doctor',
             'is_expert_verified', 'expert_profession_slug', 'expert_profession_label',
+            'has_all_expert_access',
             'expert_verification_status', 'expert_verification_message',
             'expert_verification_requested_at', 'expert_verification_can_retry',
             'has_password'
@@ -175,6 +176,7 @@ class UserSerializer(serializers.ModelSerializer):
             'phone_number', 'date_joined', 'id', 'role_label', 'role_slug',
             'is_staff', 'is_superuser',
             'national_code', 'is_verified_doctor', 'is_expert_verified', 'expert_profession_slug', 'expert_profession_label',
+            'has_all_expert_access',
             'expert_verification_status', 'expert_verification_message', 'expert_verification_requested_at',
             'expert_verification_can_retry'
         )
