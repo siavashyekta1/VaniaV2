@@ -167,7 +167,7 @@ function getAnswerOptionKey(
 }
 
 function getAnswerSubmitValue(answer: EsanjAnswer) {
-  return String(answer.row);
+  return String(answer.value);
 }
 
 function normalizeQuestionRow(value: unknown, fallback: number) {
