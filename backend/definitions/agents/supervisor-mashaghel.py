@@ -145,7 +145,7 @@ AGENT = AgentDef(
     description="دستورالعمل جامع سوپروایزر و مراجع مجازی (نسخه پیشرفته) مخصوص روانشناسی و مشاوره",
     is_free=False,
     audience="EXPERT",    #ALL #VISITOR #EXPERT
-    eligible_expert_professions=["psychiatrist", "psychologist"],    #lawyer    #psychiatrist    #psychologist
+    eligible_expert_professions=["psychiatrist", "psychologist", "psychology_student"],
     requires_visitor_selector=True,
     tags=["تخصصی"],
     system_prompt=AGENT_PROMPT,
@@ -179,4 +179,3 @@ AGENT = AgentDef(
 )
 
 AGENTS = [AGENT]
-

@@ -25,7 +25,7 @@ from .esanj_views import sync_esanj_test_bank
 
 @admin.register(RoleVerificationRequest)
 class RoleVerificationRequestAdmin(admin.ModelAdmin):
-    list_display = ('user', 'target_role', 'profession_label', 'submitted_code', 'status', 'created_at')
+    list_display = ('user', 'target_role', 'profession_label', 'submitted_code', 'university_name', 'status', 'created_at')
     list_filter = ('status', 'target_role', 'created_at')
     search_fields = ('user__phone_number', 'user__full_name')
     readonly_fields = ('user', 'target_role', 'created_at')
@@ -47,6 +47,10 @@ class RoleVerificationRequestAdmin(admin.ModelAdmin):
     def submitted_code(self, obj):
         return obj.data.get("credential_code") or "-"
     submitted_code.short_description = "Submitted Code"
+
+    def university_name(self, obj):
+        return obj.data.get("university_name") or "-"
+    university_name.short_description = "University"
 
 @admin.register(Location)
 class LocationAdmin(admin.ModelAdmin):

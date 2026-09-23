@@ -2,7 +2,7 @@
 import logging
 from django.core.cache import cache
 from users.models import CustomUser
-from users.eligibility import is_staff_or_admin_user, is_user_eligible_for_agent
+from users.eligibility import has_agent_access_override, is_staff_or_admin_user, is_user_eligible_for_agent
 from .models import AgentService
 
 logger = logging.getLogger(__name__)
@@ -62,6 +62,9 @@ class AccessControlService:
         # Rule 1.5: Role/Profession Eligibility
         if not is_user_eligible_for_agent(user, agent):
             return False, "You are not eligible for this agent."
+
+        if has_agent_access_override(user, agent):
+            return True, "Account access override"
 
         # Rule 2: Free Agents
         # Free agents are accessible to everyone, regardless of plan status.

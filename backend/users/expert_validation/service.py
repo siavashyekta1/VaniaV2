@@ -19,6 +19,7 @@ _VALIDATORS = {
     "real_lawyer": RealLawyerValidator(),
     "manual_psychiatrist": ManualReviewValidator(),
     "manual_general_doctor": ManualReviewValidator(),
+    "manual_psychology_student": ManualReviewValidator(),
 }
 
 _PROFESSION_DEFAULT_VALIDATORS = {
@@ -26,6 +27,7 @@ _PROFESSION_DEFAULT_VALIDATORS = {
     "lawyer": "real_lawyer",
     "psychiatrist": "manual_psychiatrist",
     "general_doctor": "manual_general_doctor",
+    "psychology_student": "manual_psychology_student",
 }
 
 
