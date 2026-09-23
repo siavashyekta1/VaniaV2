@@ -162,7 +162,7 @@ const normalizeInteractiveAnswers = (
 };
 
 const getInteractiveAnswerSubmitValue = (answer: InteractiveAnswer) =>
-  String(answer.row);
+  String(answer.value);
 
 const normalizeInteractiveQuestions = (
   value?: InteractiveQuestion[] | null,
