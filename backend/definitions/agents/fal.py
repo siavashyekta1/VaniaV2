@@ -11,7 +11,7 @@ from ..base import (
 
 
 AGENT_PROMPT = """
-فال قهوه و تفسیر روانشناسی
+تفسیر رورشاخ لکه های قهوه
 
 قوانین کلی پاسخ‌دهی
 - پاسخ‌ها حداکثر ۳-۴ جمله کوتاه و کاربردی
@@ -1976,8 +1976,8 @@ X) پاسخ متداول: خرچنگ، عنکبوت(بخش آبی)، سر خرگ
 
 AGENT = AgentDef(
     slug="fal",
-    name="فال قهوه و تفسیر روانشناسی",
-    description="تحلیل روانشناسی فال",
+    name="تفسیر رورشاخ لکه های قهوه",
+    description="تفسیر روان‌شناختی لکه‌ها و تصاویر قهوه",
     is_free=True,
     audience="ALL",    #ALL #VISITOR #EXPERT
     eligible_expert_professions=[],    #lawyer    #psychiatrist    #psychologist
@@ -2014,4 +2014,3 @@ AGENT = AgentDef(
 )
 
 AGENTS = [AGENT]
-

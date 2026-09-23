@@ -64,6 +64,16 @@ function normalizeDashboardJourneyState(state: JourneyState, preserveSelection =
     return state;
   }
 
+  const cases = Array.isArray(state.cases) ? state.cases : [];
+  if (cases.length === 1 && state.selected_case?.id === cases[0].id) {
+    return {
+      ...state,
+      active_view: "CASES",
+      selected_case_id: cases[0].id,
+      selected_doctor_id: cases[0].doctor_id,
+    };
+  }
+
   return {
     ...state,
     active_view: "BASE",
@@ -146,6 +156,20 @@ export default function VisitorJourneyPage() {
       const body: CanvasStateResponse = await res.json();
       const journey = body.canvases?.find((c) => c.component_key === "VANIA_PATIENT_JOURNEY");
       if (!journey) throw new Error("بوم مسیر مراجع یافت نشد.");
+
+      const cases = Array.isArray(journey.current_state.cases) ? journey.current_state.cases : [];
+      const onlyCase = !preserveSelection && cases.length === 1 ? cases[0] : null;
+      if (
+        onlyCase &&
+        onlyCase.doctor_id != null &&
+        journey.current_state.selected_case?.id !== onlyCase.id
+      ) {
+        const nextDoctorId = String(onlyCase.doctor_id);
+        setDoctorScopeId(nextDoctorId);
+        setCaseScopeId(String(onlyCase.id));
+        localStorage.setItem(`vania:last_selected_doctor_by_patient:${user.id}`, nextDoctorId);
+        return;
+      }
 
       const normalizedState = normalizeDashboardJourneyState(journey.current_state, preserveSelection);
       setCanvasId(journey.id);
