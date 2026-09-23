@@ -312,11 +312,11 @@ def _question_rows(questionnaire: dict) -> list[int]:
     return rows
 
 
-def _question_answer_rows(questionnaire: dict) -> dict[int, set[str]]:
+def _question_answer_values(questionnaire: dict) -> dict[int, set[str]]:
     questions = questionnaire.get("questions", []) if isinstance(questionnaire, dict) else []
-    rows_by_question: dict[int, set[str]] = {}
+    values_by_question: dict[int, set[str]] = {}
     if not isinstance(questions, list):
-        return rows_by_question
+        return values_by_question
     for question in questions:
         try:
             row = int(question.get("row"))
@@ -324,20 +324,20 @@ def _question_answer_rows(questionnaire: dict) -> dict[int, set[str]]:
             continue
         answers = question.get("answers", []) if isinstance(question, dict) else []
         if isinstance(answers, list):
-            rows_by_question[row] = {
-                str(answer.get("row"))
+            values_by_question[row] = {
+                str(answer.get("value"))
                 for answer in answers
                 if isinstance(answer, dict)
-                and answer.get("row") is not None
+                and answer.get("value") is not None
             }
-    return rows_by_question
+    return values_by_question
 
 
-def _question_answer_row_by_value(questionnaire: dict) -> dict[int, dict[str, str]]:
+def _question_answer_value_by_row(questionnaire: dict) -> dict[int, dict[str, str]]:
     questions = questionnaire.get("questions", []) if isinstance(questionnaire, dict) else []
-    rows_by_value: dict[int, dict[str, str]] = {}
+    values_by_row: dict[int, dict[str, str]] = {}
     if not isinstance(questions, list):
-        return rows_by_value
+        return values_by_row
     for question in questions:
         try:
             row = int(question.get("row"))
@@ -345,36 +345,36 @@ def _question_answer_row_by_value(questionnaire: dict) -> dict[int, dict[str, st
             continue
         answers = question.get("answers", []) if isinstance(question, dict) else []
         if isinstance(answers, list):
-            rows_by_value[row] = {
-                str(answer.get("value")): str(answer.get("row"))
+            values_by_row[row] = {
+                str(answer.get("row")): str(answer.get("value"))
                 for answer in answers
                 if isinstance(answer, dict)
                 and answer.get("row") is not None
                 and answer.get("value") is not None
             }
-    return rows_by_value
+    return values_by_row
 
 
 def _answers_payload(attempt: EsanjTestAttempt, answers: dict[str, str]) -> dict:
     payload = {"sex": attempt.sex, "age": attempt.age}
     questionnaire = attempt.questionnaire if isinstance(attempt.questionnaire, dict) else {}
     answer_storage = questionnaire.get("answer_storage", "value")
-    answer_rows = _question_answer_rows(questionnaire)
-    answer_row_by_value = _question_answer_row_by_value(questionnaire)
+    answer_values = _question_answer_values(questionnaire)
+    answer_value_by_row = _question_answer_value_by_row(questionnaire)
     for row in _question_rows(attempt.questionnaire):
         value = answers.get(str(row))
         if value is None:
             raise ValueError("همه سوال‌ها باید پاسخ داده شوند.")
         if answer_storage == "row":
-            selected_row = str(value)
+            selected_value = answer_value_by_row.get(row, {}).get(str(value))
         else:
-            selected_row = answer_row_by_value.get(row, {}).get(str(value))
-        if selected_row is None or (answer_rows.get(row) and selected_row not in answer_rows[row]):
+            selected_value = str(value)
+        if selected_value is None or (answer_values.get(row) and selected_value not in answer_values[row]):
             raise ValueError("یکی از پاسخ‌ها با گزینه‌های آزمون سازگار نیست.")
         try:
-            payload[f"q{row}"] = int(selected_row)
+            payload[f"q{row}"] = int(selected_value)
         except (TypeError, ValueError):
-            payload[f"q{row}"] = selected_row
+            payload[f"q{row}"] = selected_value
     return payload
 
 
@@ -524,7 +524,7 @@ class EsanjAttemptListCreateView(APIView):
                     questionnaire = {
                         **questionnaire,
                         "delivery_mode": EsanjStartAttemptSerializer.DeliveryMode.JSON,
-                        "answer_storage": "row",
+                        "answer_storage": "value",
                     }
         except (EsanjConfigurationError, EsanjAPIError) as exc:
             return _esanj_error_response(exc)

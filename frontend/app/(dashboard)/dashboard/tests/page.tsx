@@ -456,13 +456,13 @@ export default function EsanjTestsPage() {
 
                 <div className="grid gap-2">
                   {currentQuestion.answers.map((answer) => {
-                      const answerRow = String(answer.row);
-                      const selected = activeAttempt.answers?.[String(currentQuestion.row)] === answerRow;
+                      const answerValue = String(answer.value);
+                      const selected = activeAttempt.answers?.[String(currentQuestion.row)] === answerValue;
                       return (
                         <button
                           key={`${currentQuestion.row}-${answer.row}`}
                           type="button"
-                          onClick={() => saveAnswer(currentQuestion.row, answerRow)}
+                          onClick={() => saveAnswer(currentQuestion.row, answerValue)}
                           className={cn(
                             "flex min-h-12 w-full items-center justify-between rounded-md border px-4 py-3 text-right text-sm transition-colors",
                             "hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
