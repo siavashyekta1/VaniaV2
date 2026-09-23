@@ -130,6 +130,13 @@ class ExpertProfessionListView(APIView):
                 "credential_placeholder": get_ui_text(p, "credential_placeholder", "کد اعتبارسنجی تخصص را وارد کنید"),
                 "credential_help": get_ui_text(p, "credential_help", ""),
                 "sample_code": get_ui_text(p, "sample_code", ""),
+                "university_required": bool((p.validation_config or {}).get("university_required")),
+                "university_label": get_ui_text(p, "university_label", "نام دانشگاه"),
+                "university_placeholder": get_ui_text(
+                    p,
+                    "university_placeholder",
+                    "نام دانشگاه محل تحصیل را وارد کنید",
+                ),
             }
             for p in professions
         ])
@@ -329,6 +336,7 @@ class UpgradeExpertView(APIView):
             or request.data.get("license_code")
             or ""
         )
+        university_name = (request.data.get("university_name") or "").strip()
 
         if not profession_slug:
             return Response({"detail": "profession_slug is required."}, status=400)
@@ -340,6 +348,8 @@ class UpgradeExpertView(APIView):
         profession = ExpertProfession.objects.filter(slug=profession_slug, is_active=True).first()
         if not profession:
             return Response({"detail": "Invalid profession_slug."}, status=400)
+        if (profession.validation_config or {}).get("university_required") and len(university_name) < 2:
+            return Response({"detail": "university_name is required."}, status=400)
 
         result = validate_profession_credential(
             profession=profession,
@@ -371,6 +381,7 @@ class UpgradeExpertView(APIView):
                 "national_code": national_code,
                 "full_name": full_name,
                 "validation_kind": profession.validation_kind,
+                "university_name": university_name,
             }
 
             latest_request = None
@@ -401,6 +412,7 @@ class UpgradeExpertView(APIView):
                 "submitted_credential_code": str(credential_code).strip(),
                 "submitted_national_code": national_code,
                 "submitted_profession_slug": profession.slug,
+                "submitted_university_name": university_name,
                 "submitted_at": timezone.now().isoformat(),
                 "validation_kind": profession.validation_kind,
                 "admin_review_recommended": requires_manual_review,

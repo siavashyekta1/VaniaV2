@@ -418,6 +418,21 @@ class DefinitionSync:
                     "sample_code": "123456",
                 },
             },
+            {
+                "slug": "psychology_student",
+                "name": "دانشجوی روان‌شناسی",
+                "description": "دانشجوی در حال تحصیل در رشته روان‌شناسی",
+                "validation_kind": "manual_psychology_student",
+                "validation_config": {
+                    "credential_label": "کد دانشجویی",
+                    "credential_placeholder": "کد دانشجویی خود را وارد کنید",
+                    "credential_help": "کد دانشجویی، کد ملی و نام دانشگاه برای بررسی ادمین ثبت می‌شود.",
+                    "sample_code": "",
+                    "university_required": True,
+                    "university_label": "نام دانشگاه",
+                    "university_placeholder": "نام دانشگاه محل تحصیل را وارد کنید",
+                },
+            },
         ]
         for item in professions:
             ExpertProfession.objects.update_or_create(

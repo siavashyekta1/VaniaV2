@@ -40,10 +40,13 @@ def process_role_approval(sender, instance, created, **kwargs):
                 profession = None
                 if profession_slug:
                     profession = ExpertProfession.objects.filter(slug=profession_slug).first()
+                is_psychology_student = profession_slug == "psychology_student"
 
                 user.role = role
                 user.is_expert_verified = True
-                user.is_verified_doctor = True
+                # Psychology students get the approved expert workspace without
+                # being represented as licensed doctors in public directories.
+                user.is_verified_doctor = not is_psychology_student
                 user.expert_profession = profession or user.expert_profession
                 user.national_code = instance.data.get("national_code") or user.national_code
                 user.medical_license = instance.data.get("credential_code") or user.medical_license
@@ -55,6 +58,7 @@ def process_role_approval(sender, instance, created, **kwargs):
                     "submitted_credential_code": instance.data.get("credential_code") or user.medical_license,
                     "submitted_national_code": instance.data.get("national_code") or user.national_code,
                     "validation_kind": instance.data.get("validation_kind"),
+                    "submitted_university_name": instance.data.get("university_name"),
                     "role_verification_request_id": instance.id,
                     "admin_review_recommended": False,
                 }
@@ -62,7 +66,7 @@ def process_role_approval(sender, instance, created, **kwargs):
                 activate_default_expert_plan_for_transferred_credits(user)
                 logger.info(f"   -> Expert verification synced for User {user.id}")
 
-                if is_expert(user):
+                if is_expert(user) and not is_psychology_student:
                     specialty = instance.data.get('specialty', 'General Practice')
                     profile, created_profile = DoctorProfile.objects.get_or_create(
                         user=user,
