@@ -319,11 +319,11 @@ def _question_rows(questionnaire: dict) -> list[int]:
     return rows
 
 
-def _question_answer_values(questionnaire: dict) -> dict[int, set[str]]:
+def _question_answer_rows(questionnaire: dict) -> dict[int, set[str]]:
     questions = questionnaire.get("questions", []) if isinstance(questionnaire, dict) else []
-    allowed: dict[int, set[str]] = {}
+    rows_by_question: dict[int, set[str]] = {}
     if not isinstance(questions, list):
-        return allowed
+        return rows_by_question
     for question in questions:
         try:
             row = int(question.get("row"))
@@ -331,21 +331,20 @@ def _question_answer_values(questionnaire: dict) -> dict[int, set[str]]:
             continue
         answers = question.get("answers", []) if isinstance(question, dict) else []
         if isinstance(answers, list):
-            allowed[row] = {
-                str(candidate)
+            rows_by_question[row] = {
+                str(answer.get("row"))
                 for answer in answers
                 if isinstance(answer, dict)
-                for candidate in (answer.get("value"), answer.get("row"))
-                if candidate is not None
+                and answer.get("row") is not None
             }
-    return allowed
+    return rows_by_question
 
 
-def _question_answer_value_by_row(questionnaire: dict) -> dict[int, dict[str, str]]:
+def _question_answer_row_by_value(questionnaire: dict) -> dict[int, dict[str, str]]:
     questions = questionnaire.get("questions", []) if isinstance(questionnaire, dict) else []
-    values_by_row: dict[int, dict[str, str]] = {}
+    rows_by_value: dict[int, dict[str, str]] = {}
     if not isinstance(questions, list):
-        return values_by_row
+        return rows_by_value
     for question in questions:
         try:
             row = int(question.get("row"))
@@ -353,31 +352,36 @@ def _question_answer_value_by_row(questionnaire: dict) -> dict[int, dict[str, st
             continue
         answers = question.get("answers", []) if isinstance(question, dict) else []
         if isinstance(answers, list):
-            values_by_row[row] = {
-                str(answer.get("row")): str(answer.get("value"))
+            rows_by_value[row] = {
+                str(answer.get("value")): str(answer.get("row"))
                 for answer in answers
                 if isinstance(answer, dict)
                 and answer.get("row") is not None
                 and answer.get("value") is not None
             }
-    return values_by_row
+    return rows_by_value
 
 
 def _answers_payload(attempt: EsanjTestAttempt, answers: dict[str, str]) -> dict:
     payload = {"sex": attempt.sex, "age": attempt.age}
-    allowed_values = _question_answer_values(attempt.questionnaire)
-    value_by_answer_row = _question_answer_value_by_row(attempt.questionnaire)
+    questionnaire = attempt.questionnaire if isinstance(attempt.questionnaire, dict) else {}
+    answer_storage = questionnaire.get("answer_storage", "value")
+    answer_rows = _question_answer_rows(questionnaire)
+    answer_row_by_value = _question_answer_row_by_value(questionnaire)
     for row in _question_rows(attempt.questionnaire):
         value = answers.get(str(row))
         if value is None:
             raise ValueError("همه سوال‌ها باید پاسخ داده شوند.")
-        if allowed_values.get(row) and str(value) not in allowed_values[row]:
+        if answer_storage == "row":
+            selected_row = str(value)
+        else:
+            selected_row = answer_row_by_value.get(row, {}).get(str(value))
+        if selected_row is None or (answer_rows.get(row) and selected_row not in answer_rows[row]):
             raise ValueError("یکی از پاسخ‌ها با گزینه‌های آزمون سازگار نیست.")
-        value = value_by_answer_row.get(row, {}).get(str(value), value)
         try:
-            payload[f"q{row}"] = int(value)
+            payload[f"q{row}"] = int(selected_row)
         except (TypeError, ValueError):
-            payload[f"q{row}"] = value
+            payload[f"q{row}"] = selected_row
     return payload
 
 
@@ -486,7 +490,10 @@ class EsanjAttemptListCreateView(APIView):
                 .order_by("-started_at")
                 .first()
             )
-            if existing and existing.status != EsanjTestAttempt.Status.FAILED:
+            # A failed local status can still represent a consumed/completed Esanj
+            # UUID. Always resume the existing clinical attempt so starting again
+            # cannot silently consume a second upstream credit.
+            if existing:
                 return Response(EsanjAttemptSerializer(existing).data)
 
         invoice, pricing = _invoice_for_interactive_test(request.user, rule)
@@ -517,32 +524,16 @@ class EsanjAttemptListCreateView(APIView):
                     "html": html,
                     "questions": [],
                 }
-            elif clinical_test_id:
-                # Reserve/check the Esanj inventory at start for the internal UI too.
-                # Without this, users can answer the whole JSON questionnaire and only
-                # discover missing Esanj inventory when submitting interpretation.
-                client.questionnaire_html(
-                    test_id=rule.esanj_test_id,
-                    sex=data["sex"],
-                    age=data["age"],
-                    uuid=str(attempt_id),
-                    employee_id=employee_id,
-                )
-                questionnaire = client.questionnaire(rule.esanj_test_id)
-                if isinstance(questionnaire, dict):
-                    questionnaire = {
-                        **questionnaire,
-                        "delivery_mode": EsanjStartAttemptSerializer.DeliveryMode.JSON,
-                    }
             else:
-                # Package/API accounts cannot use the employee-scoped HTML
-                # reservation endpoint. Direct purchases use the JSON questionnaire
-                # and consume the API account inventory when answers are submitted.
+                # Internal tests use Esanj's JSON flow from start to finish. Mixing
+                # an HTML reservation with a JSON submission for the same UUID can
+                # leave Esanj reporting a completed attempt without a JSON result.
                 questionnaire = client.questionnaire(rule.esanj_test_id)
                 if isinstance(questionnaire, dict):
                     questionnaire = {
                         **questionnaire,
                         "delivery_mode": EsanjStartAttemptSerializer.DeliveryMode.JSON,
+                        "answer_storage": "row",
                     }
         except (EsanjConfigurationError, EsanjAPIError) as exc:
             return _esanj_error_response(exc)
@@ -615,21 +606,32 @@ class EsanjAttemptSubmitView(APIView):
             if _is_html_attempt(attempt):
                 result = client.get_interpretation(str(attempt.id))
             else:
-                try:
-                    payload = _answers_payload(attempt, answers)
-                except ValueError as exc:
-                    return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-                try:
+                if _remote_esanj_attempt_is_done(client, attempt):
+                    try:
+                        result = client.get_interpretation(str(attempt.id))
+                    except EsanjAPIError as exc:
+                        if exc.status_code != 404:
+                            raise
+                        return Response(
+                            {
+                                "error": (
+                                    "سرویس Esanj این آزمون را تکمیل‌شده اعلام می‌کند، اما نتیجه آن قابل دریافت نیست. "
+                                    "برای جلوگیری از مصرف دوباره اعتبار آزمون، ارسال مجدد انجام نشد؛ لطفاً با پشتیبانی بررسی شود."
+                                )
+                            },
+                            status=status.HTTP_409_CONFLICT,
+                        )
+                else:
+                    try:
+                        payload = _answers_payload(attempt, answers)
+                    except ValueError as exc:
+                        return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
                     result = client.submit_interpretation(
                         test_id=attempt.esanj_test_id,
                         uuid=str(attempt.id),
                         answers_payload=payload,
                         employee_id=attempt.employee_id,
                     )
-                except EsanjAPIError as exc:
-                    if exc.status_code != 404 or not _remote_esanj_attempt_is_done(client, attempt):
-                        raise
-                    result = client.get_interpretation(str(attempt.id))
             try:
                 grading = client.get_grading(str(attempt.id))
             except EsanjAPIError:

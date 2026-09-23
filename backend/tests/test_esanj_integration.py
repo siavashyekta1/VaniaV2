@@ -200,6 +200,7 @@ class EsanjIntegrationTests(TestCase):
             )
             self.assertEqual(start.status_code, 201)
             attempt_id = start.data["id"]
+            self.assertEqual(start.data["questionnaire"]["answer_storage"], "row")
 
             save = self.client.patch(
                 f"/api/vania/esanj/attempts/{attempt_id}/",
@@ -265,6 +266,7 @@ class EsanjIntegrationTests(TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["questionnaire"]["delivery_mode"], "json")
+        self.assertEqual(response.data["questionnaire"]["answer_storage"], "row")
         esanj.questionnaire_html.assert_not_called()
         esanj.questionnaire.assert_called_once_with(rule.esanj_test_id)
 
@@ -568,6 +570,39 @@ class EsanjIntegrationTests(TestCase):
         self.assertEqual(attempt.status, EsanjTestAttempt.Status.COMPLETED)
         self.assertEqual(attempt.error_message, "")
         esanj.get_interpretation.assert_called_once_with(str(attempt.id))
+        esanj.submit_interpretation.assert_not_called()
+
+    def test_submit_does_not_resend_when_remote_is_done_but_result_is_missing(self):
+        rule = self._rule(11, "remote result missing")
+        attempt = EsanjTestAttempt.objects.create(
+            user=self.visitor,
+            access_rule=rule,
+            esanj_test_id=rule.esanj_test_id,
+            test_title=rule.title,
+            status=EsanjTestAttempt.Status.FAILED,
+            age=24,
+            sex=EsanjTestAttempt.Sex.FEMALE,
+            employee_id=7001,
+            questionnaire=self._questionnaire(),
+            answers={"1": "1", "2": "0"},
+            error_message="remote 404",
+        )
+
+        self.client.force_authenticate(self.visitor)
+        with patch("vania_core.esanj_views.EsanjClient") as client_class:
+            esanj = client_class.return_value
+            esanj.status_do.return_value = [
+                {"uuid": str(attempt.id), "test_id": rule.esanj_test_id, "employee_id": 7001, "is_done": 1}
+            ]
+            esanj.get_interpretation.side_effect = EsanjAPIError("not found", 404, {"message": "not found"})
+
+            response = self.client.post(f"/api/vania/esanj/attempts/{attempt.id}/submit/", {}, format="json")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("مصرف دوباره", response.data["error"])
+        esanj.submit_interpretation.assert_not_called()
+        attempt.refresh_from_db()
+        self.assertEqual(attempt.status, EsanjTestAttempt.Status.FAILED)
 
     def test_submit_rejects_answer_values_outside_questionnaire_options(self):
         rule = self._rule(11, "تست نمونه")
@@ -588,7 +623,7 @@ class EsanjIntegrationTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("سازگار نیست", response.data["error"])
 
-    def test_submit_maps_answer_row_to_upstream_value(self):
+    def test_submit_maps_legacy_stored_values_to_upstream_answer_rows(self):
         rule = self._rule(11, "تست نمونه")
         questionnaire = {
             "test": {"id": 11, "title": "تست نمونه"},
@@ -620,7 +655,7 @@ class EsanjIntegrationTests(TestCase):
             age=24,
             sex=EsanjTestAttempt.Sex.FEMALE,
             questionnaire=questionnaire,
-            answers={"1": "2", "2": "1"},
+            answers={"1": "20", "2": "1"},
         )
 
         self.client.force_authenticate(self.visitor)
@@ -634,8 +669,8 @@ class EsanjIntegrationTests(TestCase):
             response = self.client.post(f"/api/vania/esanj/attempts/{attempt.id}/submit/", {}, format="json")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["result"]["json"]["answers_payload"]["q1"], 20)
-        self.assertEqual(response.data["result"]["json"]["answers_payload"]["q2"], 1)
+        self.assertEqual(response.data["result"]["json"]["answers_payload"]["q1"], 2)
+        self.assertEqual(response.data["result"]["json"]["answers_payload"]["q2"], 2)
 
     def test_expert_assigned_interactive_test_syncs_result_to_clinical_history(self):
         self._rule(11, "تست تعاملی نمونه", allow_visitors=False, allow_experts=True)
@@ -685,6 +720,8 @@ class EsanjIntegrationTests(TestCase):
             )
             self.assertEqual(start.status_code, 201)
             self.assertEqual(start.data["clinical_test_id"], assigned.data["id"])
+            self.assertEqual(start.data["questionnaire"]["answer_storage"], "row")
+            esanj.questionnaire_html.assert_not_called()
 
             submit = self.client.post(
                 f"/api/vania/esanj/attempts/{start.data['id']}/submit/",
@@ -1123,7 +1160,7 @@ class EsanjIntegrationTests(TestCase):
 
             first_submit = self.client.post(
                 f"/api/vania/esanj/attempts/{first_start.data['id']}/submit/",
-                {"answers": {"1": "1", "2": "0"}},
+                {"answers": {"1": "1", "2": "1"}},
                 format="json",
             )
             self.assertEqual(first_submit.status_code, 200)
@@ -1146,7 +1183,7 @@ class EsanjIntegrationTests(TestCase):
 
             second_save = self.client.patch(
                 f"/api/vania/esanj/attempts/{second_start.data['id']}/",
-                {"answers": {"10": "3", "20": "8"}},
+                {"answers": {"10": "1", "20": "2"}},
                 format="json",
             )
             self.assertEqual(second_save.status_code, 200)
@@ -1154,12 +1191,12 @@ class EsanjIntegrationTests(TestCase):
 
             second_submit = self.client.post(
                 f"/api/vania/esanj/attempts/{second_start.data['id']}/submit/",
-                {"answers": {"30": "12"}},
+                {"answers": {"30": "2"}},
                 format="json",
             )
             self.assertEqual(second_submit.status_code, 200)
-            self.assertEqual(second_submit.data["result"]["json"]["answers_payload"]["q10"], 3)
-            self.assertEqual(second_submit.data["result"]["json"]["answers_payload"]["q30"], 12)
+            self.assertEqual(second_submit.data["result"]["json"]["answers_payload"]["q10"], 1)
+            self.assertEqual(second_submit.data["result"]["json"]["answers_payload"]["q30"], 2)
 
         final_history = self.client.get(
             "/api/vania/tests/",

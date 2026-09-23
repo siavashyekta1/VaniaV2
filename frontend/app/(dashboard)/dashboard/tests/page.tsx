@@ -166,17 +166,8 @@ function getAnswerOptionKey(
   return `${questionRow}:${answer.optionKey || answer.row}:${answer.value}:${index}`;
 }
 
-function hasDuplicateAnswerValues(answers: EsanjAnswer[]) {
-  const values = new Set<string>();
-  return answers.some((answer) => {
-    if (values.has(answer.value)) return true;
-    values.add(answer.value);
-    return false;
-  });
-}
-
-function getAnswerSubmitValue(answer: EsanjAnswer, answers: EsanjAnswer[]) {
-  return String(hasDuplicateAnswerValues(answers) ? answer.row : answer.value);
+function getAnswerSubmitValue(answer: EsanjAnswer) {
+  return String(answer.row);
 }
 
 function normalizeQuestionRow(value: unknown, fallback: number) {
@@ -688,21 +679,11 @@ export default function EsanjTestsPage() {
                         activeAttempt.answers?.[String(currentQuestion.row)];
                       const localSelectedIndex =
                         selectedAnswerKeys[questionKey];
-                      const hasDuplicateValues =
-                        hasDuplicateAnswerValues(currentAnswers);
-                      const firstMatchingAnswerIndex = hasDuplicateValues
-                        ? currentAnswers.findIndex(
-                            (item) =>
-                              getAnswerSubmitValue(item, currentAnswers) ===
-                              String(storedAnswer),
-                          )
-                        : -1;
                       const selected =
                         localSelectedIndex !== undefined
                           ? localSelectedIndex === answerIndex
-                          : hasDuplicateValues
-                            ? firstMatchingAnswerIndex === answerIndex
-                            : String(storedAnswer) === String(answer.value);
+                          : String(storedAnswer) ===
+                            getAnswerSubmitValue(answer);
                       return (
                         <button
                           key={answerOptionKey}
@@ -710,7 +691,7 @@ export default function EsanjTestsPage() {
                           onClick={() =>
                             saveAnswer(
                               currentQuestion.row,
-                              getAnswerSubmitValue(answer, currentAnswers),
+                              getAnswerSubmitValue(answer),
                               questionKey,
                               answerIndex,
                             )
