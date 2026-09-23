@@ -169,17 +169,33 @@ class DefinitionSync:
             # We don't raise here to allow the rest of the sync to proceed
 
     @staticmethod
-    def sync_agents():
+    def sync_agents(prompt_slugs=None):
+        """Sync agent metadata without clobbering database-managed prompts.
+
+        Existing prompts are preserved unless their slug is explicitly supplied.
+        New agents still receive the prompt from their code definition.
+        """
+        prompt_slugs = set(prompt_slugs or [])
         logger.info(f"🔄 [Sync] Agents: {len(AGENTS)}")
         for a in AGENTS:
             demo_config_dict = a.demo_config.to_dict() if a.demo_config else {}
+            existing_prompt = (
+                AgentService.objects.filter(slug=a.slug)
+                .values_list("system_prompt", flat=True)
+                .first()
+            )
+            system_prompt = (
+                a.system_prompt
+                if existing_prompt is None or a.slug in prompt_slugs
+                else existing_prompt
+            )
             agent_obj, _ = AgentService.objects.update_or_create(
                 slug=a.slug,
                 defaults={
                     "name": a.name,
                     "model_id": a.model_id,
                     "description": a.description,
-                    "system_prompt": a.system_prompt,
+                    "system_prompt": system_prompt,
                     "capabilities": a.capabilities,
                     "tags": a.tags,
                     "user_guide": a.user_guide,
@@ -416,7 +432,7 @@ class DefinitionSync:
             )
                     
     @classmethod
-    def sync_all(cls):
+    def sync_all(cls, agent_prompt_slugs=None):
         logger.info("--- Starting Definition Synchronization ---")
         # [NEW] Admin sync is often best done outside atomic block or handled carefully
         # but here it is fine as it uses get_user_model
@@ -425,7 +441,7 @@ class DefinitionSync:
         with transaction.atomic():
             cls.sync_billing_config()
             cls.sync_faqs()
-            cls.sync_agents() 
+            cls.sync_agents(prompt_slugs=agent_prompt_slugs)
             cls.sync_locations()
             cls.sync_expert_professions()
             cls.sync_plans_and_products()
