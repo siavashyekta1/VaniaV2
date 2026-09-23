@@ -161,22 +161,8 @@ const normalizeInteractiveAnswers = (
     .filter((answer) => answer.title.trim() && answer.value.trim());
 };
 
-const hasDuplicateInteractiveAnswerValues = (answers: InteractiveAnswer[]) => {
-  const values = new Set<string>();
-  return answers.some((answer) => {
-    if (values.has(answer.value)) return true;
-    values.add(answer.value);
-    return false;
-  });
-};
-
-const getInteractiveAnswerSubmitValue = (
-  answer: InteractiveAnswer,
-  answers: InteractiveAnswer[],
-) =>
-  String(
-    hasDuplicateInteractiveAnswerValues(answers) ? answer.row : answer.value,
-  );
+const getInteractiveAnswerSubmitValue = (answer: InteractiveAnswer) =>
+  String(answer.row);
 
 const normalizeInteractiveQuestions = (
   value?: InteractiveQuestion[] | null,
@@ -948,10 +934,8 @@ export function PatientTestsTab({
                 {activeAnswers.length > 0 ? (
                   <div className="grid gap-2">
                     {activeAnswers.map((answer) => {
-                      const answerValue = getInteractiveAnswerSubmitValue(
-                        answer,
-                        activeAnswers,
-                      );
+                      const answerValue =
+                        getInteractiveAnswerSubmitValue(answer);
                       const selected =
                         activeAttempt.answers?.[String(activeQuestion.row)] ===
                         answerValue;
