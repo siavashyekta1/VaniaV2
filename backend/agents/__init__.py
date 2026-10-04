@@ -5,7 +5,12 @@ import logging
 logger = logging.getLogger(__name__)
 logger.debug("📦 [Agents] Package initialized.")
 
-# Expose the router so it can be imported as `from agents import router`
-from .routes import router
-
 __all__ = ["router"]
+
+
+def __getattr__(name):
+    if name == "router":
+        from .routes import router
+
+        return router
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
