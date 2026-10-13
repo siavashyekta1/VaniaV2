@@ -21,6 +21,12 @@ from services.models_canvas import CanvasType, CanvasInstance
 from services.access_service import access_service
 from users.roles import is_expert, is_visitor
 from core.ai_provider import get_agno_openai_kwargs
+from core.ai_models import (
+    is_native_reasoning_model,
+    requires_none_for_chat_tool_calling,
+    resolve_chat_model,
+    resolve_reasoning_effort,
+)
 # --- Capability System ---
 from capabilities.registry import CapabilityRegistry
 
@@ -39,15 +45,6 @@ from fastapi import Request
 
 # Configure Logger
 logger = logging.getLogger(__name__)
-
-# [CONFIG] Native Reasoning Models
-NATIVE_REASONING_MODELS = {
-    "o1", "o1-mini", "o1-preview", "o3-mini",
-    "gpt-5", "gpt-5-mini", "gpt-5-nano",
-    "deepseek-r1", "deepseek-reasoner"
-}
-
-NONE_EFFORT_MODELS = {"gpt-5.1", "gpt-5.2", "gpt5.1", "gpt5.2", "gpt-5", "gpt5"}
 
 VISITOR_SELF_CONTEXT_AGENT_SLUGS = {
     "HAM-moraje",
@@ -156,15 +153,23 @@ def create_agent_for_service(user, service_slug: str, session_id: str, request: 
     has_access, _ = access_service.check_permission(user, service.slug)
     is_demo_mode = not has_access
     
-    target_model_id = service.model_id 
-    is_swapped_model = False 
+    demo_conf = service.demo_config or {}
+    model_selection = resolve_chat_model(
+        service_model_id=service.model_id,
+        is_demo_mode=is_demo_mode,
+        demo_model_override=demo_conf.get("model_override"),
+    )
+    target_model_id = model_selection.model_id
+    is_swapped_model = model_selection.source != "agent_service"
 
-    if is_demo_mode:
-        demo_conf = service.demo_config or {}
-        if demo_conf.get("model_override"):
-            target_model_id = demo_conf["model_override"]
-            is_swapped_model = True
-            logger.info(f"🎭 [Factory] Demo Mode active for User {user.id}. Swapped model to: {target_model_id}")
+    logger.info(
+        "[Factory] Model selected: agent_slug=%s session_id=%s model=%s source=%s demo=%s",
+        service.slug,
+        session_id,
+        target_model_id,
+        model_selection.source,
+        is_demo_mode,
+    )
 
     active_caps = _resolve_active_capabilities(service, user)
     
@@ -284,23 +289,25 @@ def create_agent_for_service(user, service_slug: str, session_id: str, request: 
     # =========================================================================
     # 6. Hybrid Reasoning & Model Sanitization
     # =========================================================================
-    model_id_lower = (target_model_id or "gpt-4o").lower()
-    is_native_reasoning = any(m in model_id_lower for m in NATIVE_REASONING_MODELS)
+    is_native_reasoning = is_native_reasoning_model(target_model_id)
     
     llm_kwargs = {"id": target_model_id, **get_agno_openai_kwargs()}
     
     user_effort_override = request.headers.get("x-reasoning-effort") if request else None
     user_reasoning_override = request.headers.get("x-enable-reasoning") if request else None
 
-    final_effort = user_effort_override or service.reasoning_effort
-    
-    if is_native_reasoning:
-        if final_effort and final_effort != 'default':
-            if final_effort == 'none':
-                if model_id_lower in NONE_EFFORT_MODELS:
-                    llm_kwargs["reasoning_effort"] = "none"
-            else:
-                llm_kwargs["reasoning_effort"] = final_effort.lower()
+    requested_effort = user_effort_override or service.reasoning_effort
+    final_effort = resolve_reasoning_effort(target_model_id, requested_effort)
+    if final_effort:
+        llm_kwargs["reasoning_effort"] = final_effort
+    if requires_none_for_chat_tool_calling(target_model_id) and requested_effort != "none":
+        logger.info(
+            "[Factory] Forced reasoning_effort=none for Chat Completions tool compatibility: "
+            "agent_slug=%s session_id=%s requested_effort=%s",
+            service.slug,
+            session_id,
+            requested_effort or "default",
+        )
     
     use_agno_reasoning_wrapper = False 
     if not is_native_reasoning and not is_swapped_model:
@@ -403,6 +410,14 @@ def create_agent_for_service(user, service_slug: str, session_id: str, request: 
     )
 
     elapsed = time.time() - start_time
-    logger.info(f"✅ [Factory] Agent '{service.name}' built in {elapsed:.4f}s. Model: {target_model_id} (Swapped: {is_swapped_model})")
+    logger.info(
+        "✅ [Factory] Agent '%s' built in %.4fs. Model: %s (Source: %s, Swapped: %s, Reasoning effort: %s)",
+        service.name,
+        elapsed,
+        target_model_id,
+        model_selection.source,
+        is_swapped_model,
+        final_effort or "provider-default",
+    )
     
     return agent_instance
