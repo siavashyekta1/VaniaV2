@@ -22,10 +22,12 @@ from services.access_service import access_service
 from users.roles import is_expert, is_visitor
 from core.ai_provider import get_agno_openai_kwargs
 from core.ai_models import (
+    get_expert_responses_reasoning_effort,
     is_native_reasoning_model,
     requires_none_for_chat_tool_calling,
     resolve_chat_model,
     resolve_reasoning_effort,
+    should_use_expert_responses,
 )
 # --- Capability System ---
 from capabilities.registry import CapabilityRegistry
@@ -33,7 +35,7 @@ from capabilities.registry import CapabilityRegistry
 # --- Context ---
 from .context import resource_context
 from .global_profile_tools import get_global_profile_tools
-from .models import SanitizedOpenAIChat
+from .models import SanitizedOpenAIChat, SanitizedOpenAIResponses
 from .profile_context import build_default_profile_context, get_session_data_for_profile_context
 from .storage import get_session_safe
 
@@ -290,17 +292,33 @@ def create_agent_for_service(user, service_slug: str, session_id: str, request: 
     # 6. Hybrid Reasoning & Model Sanitization
     # =========================================================================
     is_native_reasoning = is_native_reasoning_model(target_model_id)
+    use_expert_responses = should_use_expert_responses(
+        audience=service.audience,
+        model_id=target_model_id,
+    )
     
     llm_kwargs = {"id": target_model_id, **get_agno_openai_kwargs()}
     
     user_effort_override = request.headers.get("x-reasoning-effort") if request else None
     user_reasoning_override = request.headers.get("x-enable-reasoning") if request else None
 
-    requested_effort = user_effort_override or service.reasoning_effort
-    final_effort = resolve_reasoning_effort(target_model_id, requested_effort)
+    requested_effort = (
+        get_expert_responses_reasoning_effort()
+        if use_expert_responses
+        else user_effort_override or service.reasoning_effort
+    )
+    final_effort = resolve_reasoning_effort(
+        target_model_id,
+        requested_effort,
+        use_responses_api=use_expert_responses,
+    )
     if final_effort:
         llm_kwargs["reasoning_effort"] = final_effort
-    if requires_none_for_chat_tool_calling(target_model_id) and requested_effort != "none":
+    if (
+        not use_expert_responses
+        and requires_none_for_chat_tool_calling(target_model_id)
+        and requested_effort != "none"
+    ):
         logger.info(
             "[Factory] Forced reasoning_effort=none for Chat Completions tool compatibility: "
             "agent_slug=%s session_id=%s requested_effort=%s",
@@ -315,7 +333,11 @@ def create_agent_for_service(user, service_slug: str, session_id: str, request: 
         if final_enable_reasoning:
             use_agno_reasoning_wrapper = True
 
-    llm_model = SanitizedOpenAIChat(**llm_kwargs)
+    if use_expert_responses:
+        # Keep provider-side response storage disabled for sensitive expert workflows.
+        llm_model = SanitizedOpenAIResponses(**llm_kwargs, store=False)
+    else:
+        llm_model = SanitizedOpenAIChat(**llm_kwargs)
 
     # =========================================================================
     # 7. Knowledge Base (RAG)
@@ -411,12 +433,13 @@ def create_agent_for_service(user, service_slug: str, session_id: str, request: 
 
     elapsed = time.time() - start_time
     logger.info(
-        "✅ [Factory] Agent '%s' built in %.4fs. Model: %s (Source: %s, Swapped: %s, Reasoning effort: %s)",
+        "✅ [Factory] Agent '%s' built in %.4fs. Model: %s (Source: %s, Swapped: %s, Transport: %s, Reasoning effort: %s)",
         service.name,
         elapsed,
         target_model_id,
         model_selection.source,
         is_swapped_model,
+        "responses" if use_expert_responses else "chat_completions",
         final_effort or "provider-default",
     )
     

@@ -3,11 +3,14 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from core.ai_models import (
+    expert_responses_enabled,
+    get_expert_responses_reasoning_effort,
     get_chat_model_override,
     is_native_reasoning_model,
     requires_none_for_chat_tool_calling,
     resolve_chat_model,
     resolve_reasoning_effort,
+    should_use_expert_responses,
     supports_none_reasoning_effort,
 )
 from services.serializers import ServiceSerializer
@@ -80,6 +83,42 @@ class ModelCapabilityTests(TestCase):
                     resolve_reasoning_effort("gpt-6-luna", requested),
                     "none",
                 )
+
+    def test_luna_allows_high_effort_with_responses_api(self):
+        self.assertEqual(
+            resolve_reasoning_effort(
+                "gpt-6-luna",
+                "high",
+                use_responses_api=True,
+            ),
+            "high",
+        )
+
+    def test_expert_responses_pilot_is_strictly_scoped(self):
+        env = {
+            "VANIA_EXPERT_RESPONSES_ENABLED": "true",
+            "VANIA_EXPERT_RESPONSES_REASONING_EFFORT": "high",
+        }
+        with patch.dict("os.environ", env, clear=False):
+            self.assertTrue(expert_responses_enabled())
+            self.assertEqual(get_expert_responses_reasoning_effort(), "high")
+            self.assertTrue(
+                should_use_expert_responses(audience="EXPERT", model_id="gpt-6-luna")
+            )
+            self.assertFalse(
+                should_use_expert_responses(audience="ALL", model_id="gpt-6-luna")
+            )
+            self.assertFalse(
+                should_use_expert_responses(audience="EXPERT", model_id="gpt-5.4-mini")
+            )
+
+    def test_invalid_expert_responses_effort_falls_back_to_high(self):
+        with patch.dict(
+            "os.environ",
+            {"VANIA_EXPERT_RESPONSES_REASONING_EFFORT": "xhigh"},
+            clear=False,
+        ):
+            self.assertEqual(get_expert_responses_reasoning_effort(), "high")
 
     def test_existing_non_native_model_behavior_is_preserved(self):
         self.assertFalse(is_native_reasoning_model("gpt-4o-mini"))
