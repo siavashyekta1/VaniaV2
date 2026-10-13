@@ -13,6 +13,7 @@ services:
       cache_from:
         - *backend-image
     image: *backend-image
+    pull_policy: never
     # image: 'charlievespera/vaniaapp-backend:latest'
     env_file:
       - .env
@@ -39,6 +40,7 @@ services:
       cache_from:
         - *frontend-image
     image: *frontend-image
+    pull_policy: never
     # image: 'charlievespera/vaniaapp-frontend:latest'
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
@@ -51,6 +53,7 @@ services:
       - app
   worker:
     image: *backend-image
+    pull_policy: never
     # image: 'charlievespera/vaniaapp-backend:latest'
     env_file:
       - .env
@@ -64,6 +67,7 @@ services:
       - db
   beat:
     image: *backend-image
+    pull_policy: never
     # image: 'charlievespera/vaniaapp-backend:latest'
     env_file:
       - .env
