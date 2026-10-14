@@ -1,9 +1,12 @@
+import mimetypes
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from agno.models.message import Message
 from agno.models.openai import OpenAIChat
 from agno.models.openai.responses import OpenAIResponses
 from agno.models.response import ModelResponse
+from agno.media import File
 from agno.tools.function import FunctionCall, FunctionExecutionResult
 from agno.utils.timer import Timer
 
@@ -71,6 +74,52 @@ class SanitizedOpenAIResponses(OpenAIResponses):
 
     def reset_usage_metrics(self) -> None:
         self.last_usage_metrics = None
+
+    @staticmethod
+    def _content_file_name(file: File) -> Optional[str]:
+        """Return a filename that OpenAI can use to identify the file type.
+
+        Agno 2.3.2 uploads ``File.content`` as raw bytes. The OpenAI SDK then
+        assigns no filename, so Responses file-search rejects otherwise valid
+        PDFs with ``Files with extensions [none] are not supported``.
+        """
+        candidate = getattr(file, "filename", None) or getattr(file, "name", None)
+        if candidate:
+            candidate = Path(str(candidate)).name
+
+        mime_type = getattr(file, "mime_type", None)
+        suffix = Path(candidate).suffix if candidate else ""
+        if not suffix and mime_type:
+            guessed = mimetypes.guess_extension(str(mime_type).split(";", 1)[0].strip())
+            if guessed:
+                candidate = f"{candidate or 'attachment'}{guessed}"
+
+        if not candidate or not Path(candidate).suffix:
+            return None
+        return candidate
+
+    def _upload_file(self, file: File) -> Optional[str]:
+        """Upload content-backed files without dropping filename metadata."""
+        if file.content is None or file.url is not None or file.filepath is not None:
+            return super()._upload_file(file)
+
+        file_name = self._content_file_name(file)
+        if not file_name:
+            # Skipping an unidentifiable file keeps the whole agent run alive.
+            # Vania's tool result still contains attachment metadata, allowing
+            # the assistant to report that the attachment was not inspected.
+            return None
+
+        mime_type = (
+            getattr(file, "mime_type", None)
+            or mimetypes.guess_type(file_name)[0]
+            or "application/octet-stream"
+        )
+        result = self.get_client().files.create(
+            file=(file_name, file.content, mime_type),
+            purpose="assistants",
+        )
+        return result.id
 
     def _remember_usage_metrics(self, response: ModelResponse) -> None:
         usage = getattr(response, "response_usage", None)

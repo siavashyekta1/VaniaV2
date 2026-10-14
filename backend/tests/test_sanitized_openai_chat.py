@@ -1,5 +1,7 @@
 from types import SimpleNamespace
-from unittest import TestCase
+from unittest import TestCase, mock
+
+from agno.media import File
 
 from agents.service_agent import _extract_model_usage_metrics
 from agents.models import SanitizedOpenAIChat, SanitizedOpenAIResponses
@@ -104,3 +106,48 @@ class SanitizedOpenAIResponsesTests(TestCase):
                 "total_tokens": 45,
             },
         )
+
+    def test_upload_content_file_preserves_pdf_filename_and_mime_type(self):
+        model = SanitizedOpenAIResponses(id="gpt-6-luna", api_key="test")
+        client = SimpleNamespace(
+            files=SimpleNamespace(create=mock.Mock(return_value=SimpleNamespace(id="file_123")))
+        )
+        model.get_client = mock.Mock(return_value=client)
+
+        file = File(
+            content=b"%PDF-test",
+            filename="clinical-report.pdf",
+            name="clinical-report.pdf",
+            mime_type="application/pdf",
+            file_type="pdf",
+        )
+
+        self.assertEqual(model._upload_file(file), "file_123")
+        client.files.create.assert_called_once_with(
+            file=("clinical-report.pdf", b"%PDF-test", "application/pdf"),
+            purpose="assistants",
+        )
+
+    def test_upload_content_file_derives_extension_from_mime_type(self):
+        model = SanitizedOpenAIResponses(id="gpt-6-luna", api_key="test")
+        client = SimpleNamespace(
+            files=SimpleNamespace(create=mock.Mock(return_value=SimpleNamespace(id="file_456")))
+        )
+        model.get_client = mock.Mock(return_value=client)
+
+        file = File(content=b"%PDF-test", name="attachment", mime_type="application/pdf")
+
+        self.assertEqual(model._upload_file(file), "file_456")
+        upload = client.files.create.call_args.kwargs["file"]
+        self.assertEqual(upload[0], "attachment.pdf")
+        self.assertEqual(upload[1], b"%PDF-test")
+        self.assertEqual(upload[2], "application/pdf")
+
+    def test_upload_content_file_without_identifiable_type_is_skipped(self):
+        model = SanitizedOpenAIResponses(id="gpt-6-luna", api_key="test")
+        model.get_client = mock.Mock()
+
+        file = File(content=b"unknown", name="attachment")
+
+        self.assertIsNone(model._upload_file(file))
+        model.get_client.assert_not_called()

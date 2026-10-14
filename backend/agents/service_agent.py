@@ -276,6 +276,7 @@ class ServiceAgent(Agent):
         run_log = f"[Run {self.session_id}]"
         
         full_response_accumulator = ""
+        run_completed_successfully = False
         self._captured_run_metrics = None  # Reset for this run
         self._captured_usage_totals = {"input_tokens": 0, "output_tokens": 0}
         if hasattr(self.model, "reset_usage_metrics"):
@@ -365,6 +366,8 @@ class ServiceAgent(Agent):
                          tool_name = getattr(chunk, 'tool_call', {}).get('function', {}).get('name', 'unknown')
                          logger.info(f"{run_log} 🛠️  Model is calling Tool: {tool_name}")
 
+                run_completed_successfully = True
+
             finally:
                 self.additional_input = previous_additional_input
                 self.suppress_plaintext_response = previous_suppress_plaintext
@@ -382,7 +385,10 @@ class ServiceAgent(Agent):
             # 4. Precise Billing
             # Billing should not keep the stream open after content generation is done.
             # Run it in the background so the UI can unlock as soon as the model finishes.
-            asyncio.create_task(self._finalize_billing(run_log))
+            if run_completed_successfully:
+                asyncio.create_task(self._finalize_billing(run_log))
+            else:
+                logger.warning(f"{run_log} ⚠️ Billing skipped because the run did not complete successfully.")
 
     @sync_to_async
     def _check_access(self) -> tuple[bool, str]:
