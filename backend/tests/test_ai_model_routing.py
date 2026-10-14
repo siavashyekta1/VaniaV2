@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from core.ai_models import (
     expert_responses_enabled,
+    get_expert_chat_model_override,
     get_expert_responses_reasoning_effort,
     get_chat_model_override,
     is_native_reasoning_model,
@@ -55,6 +56,14 @@ class ChatModelRoutingTests(TestCase):
         with patch.dict("os.environ", {"VANIA_CHAT_MODEL_OVERRIDE": "   "}, clear=False):
             self.assertIsNone(get_chat_model_override())
 
+    def test_blank_expert_environment_variable_disables_override(self):
+        with patch.dict(
+            "os.environ",
+            {"VANIA_EXPERT_CHAT_MODEL_OVERRIDE": "   "},
+            clear=False,
+        ):
+            self.assertIsNone(get_expert_chat_model_override())
+
     def test_environment_variable_is_used_when_no_explicit_override_is_passed(self):
         with patch.dict(
             "os.environ",
@@ -65,6 +74,30 @@ class ChatModelRoutingTests(TestCase):
                 service_model_id="gpt-5.4",
                 is_demo_mode=False,
             )
+
+        self.assertEqual(selected.model_id, "gpt-6-luna")
+        self.assertEqual(selected.source, "stage_environment_override")
+
+    def test_expert_override_wins_over_global_stage_override(self):
+        selected = resolve_chat_model(
+            service_model_id="gpt-5.4",
+            is_demo_mode=False,
+            environment_override="gpt-6-luna",
+            audience="EXPERT",
+            expert_environment_override="gpt-5.4-mini",
+        )
+
+        self.assertEqual(selected.model_id, "gpt-5.4-mini")
+        self.assertEqual(selected.source, "stage_expert_environment_override")
+
+    def test_expert_override_does_not_change_non_expert_agents(self):
+        selected = resolve_chat_model(
+            service_model_id="gpt-5.4",
+            is_demo_mode=False,
+            environment_override="gpt-6-luna",
+            audience="ALL",
+            expert_environment_override="gpt-5.4-mini",
+        )
 
         self.assertEqual(selected.model_id, "gpt-6-luna")
         self.assertEqual(selected.source, "stage_environment_override")
@@ -105,11 +138,17 @@ class ModelCapabilityTests(TestCase):
             self.assertTrue(
                 should_use_expert_responses(audience="EXPERT", model_id="gpt-6-luna")
             )
+            self.assertTrue(
+                should_use_expert_responses(
+                    audience="EXPERT",
+                    model_id="gpt-5.4-mini",
+                )
+            )
             self.assertFalse(
                 should_use_expert_responses(audience="ALL", model_id="gpt-6-luna")
             )
             self.assertFalse(
-                should_use_expert_responses(audience="EXPERT", model_id="gpt-5.4-mini")
+                should_use_expert_responses(audience="EXPERT", model_id="gpt-5.4")
             )
 
     def test_invalid_expert_responses_effort_falls_back_to_high(self):

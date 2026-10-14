@@ -160,6 +160,7 @@ def create_agent_for_service(user, service_slug: str, session_id: str, request: 
         service_model_id=service.model_id,
         is_demo_mode=is_demo_mode,
         demo_model_override=demo_conf.get("model_override"),
+        audience=service.audience,
     )
     target_model_id = model_selection.model_id
     is_swapped_model = model_selection.source != "agent_service"

@@ -4,6 +4,7 @@ from typing import Optional
 
 
 CHAT_MODEL_OVERRIDE_ENV = "VANIA_CHAT_MODEL_OVERRIDE"
+EXPERT_CHAT_MODEL_OVERRIDE_ENV = "VANIA_EXPERT_CHAT_MODEL_OVERRIDE"
 EXPERT_RESPONSES_ENABLED_ENV = "VANIA_EXPERT_RESPONSES_ENABLED"
 EXPERT_RESPONSES_REASONING_EFFORT_ENV = "VANIA_EXPERT_RESPONSES_REASONING_EFFORT"
 
@@ -48,6 +49,12 @@ def get_chat_model_override() -> Optional[str]:
     return value or None
 
 
+def get_expert_chat_model_override() -> Optional[str]:
+    """Return the optional expert-only model override used by isolated environments."""
+    value = (os.getenv(EXPERT_CHAT_MODEL_OVERRIDE_ENV) or "").strip()
+    return value or None
+
+
 def expert_responses_enabled() -> bool:
     """Return whether the isolated expert Responses API pilot is enabled."""
     value = (os.getenv(EXPERT_RESPONSES_ENABLED_ENV) or "").strip().lower()
@@ -63,10 +70,15 @@ def get_expert_responses_reasoning_effort() -> str:
 
 
 def should_use_expert_responses(*, audience: Optional[str], model_id: Optional[str]) -> bool:
-    """Scope the pilot to Luna-powered expert assistants only."""
+    """Scope the Responses pilot to explicitly supported expert models only."""
     model = normalize_model_id(model_id)
     is_luna = model == "gpt-6-luna" or model.startswith("gpt-6-luna-")
-    return expert_responses_enabled() and (audience or "").upper() == "EXPERT" and is_luna
+    is_gpt_54_mini = model == "gpt-5.4-mini" or model.startswith("gpt-5.4-mini-")
+    return (
+        expert_responses_enabled()
+        and (audience or "").upper() == "EXPERT"
+        and (is_luna or is_gpt_54_mini)
+    )
 
 
 def resolve_chat_model(
@@ -75,6 +87,8 @@ def resolve_chat_model(
     is_demo_mode: bool,
     demo_model_override: Optional[str] = None,
     environment_override: Optional[str] = None,
+    audience: Optional[str] = None,
+    expert_environment_override: Optional[str] = None,
 ) -> ChatModelSelection:
     """Resolve the effective chat model without mutating synced agent definitions."""
     model_id = (service_model_id or "gpt-4o").strip() or "gpt-4o"
@@ -94,6 +108,15 @@ def resolve_chat_model(
         if cleaned_override:
             model_id = cleaned_override
             source = "stage_environment_override"
+
+    expert_override = expert_environment_override
+    if expert_override is None:
+        expert_override = get_expert_chat_model_override()
+    if (audience or "").upper() == "EXPERT" and expert_override:
+        cleaned_expert_override = expert_override.strip()
+        if cleaned_expert_override:
+            model_id = cleaned_expert_override
+            source = "stage_expert_environment_override"
 
     return ChatModelSelection(model_id=model_id, source=source)
 
