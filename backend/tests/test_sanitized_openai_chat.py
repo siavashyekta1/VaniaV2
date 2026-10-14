@@ -151,3 +151,39 @@ class SanitizedOpenAIResponsesTests(TestCase):
 
         self.assertIsNone(model._upload_file(file))
         model.get_client.assert_not_called()
+
+    def test_create_vector_store_waits_for_file_batch_completion(self):
+        model = SanitizedOpenAIResponses(id="gpt-6-luna", api_key="test")
+        create_store = mock.Mock(return_value=SimpleNamespace(id="vs_123"))
+        create_and_poll = mock.Mock(return_value=SimpleNamespace(status="completed", file_counts=None))
+        client = SimpleNamespace(
+            vector_stores=SimpleNamespace(
+                create=create_store,
+                file_batches=SimpleNamespace(create_and_poll=create_and_poll),
+            )
+        )
+        model.get_client = mock.Mock(return_value=client)
+
+        self.assertEqual(model._create_vector_store(["file_1", "file_2"]), "vs_123")
+        create_and_poll.assert_called_once_with(
+            vector_store_id="vs_123",
+            file_ids=["file_1", "file_2"],
+            poll_interval_ms=500,
+        )
+
+    def test_create_vector_store_rejects_failed_indexing(self):
+        model = SanitizedOpenAIResponses(id="gpt-6-luna", api_key="test")
+        client = SimpleNamespace(
+            vector_stores=SimpleNamespace(
+                create=mock.Mock(return_value=SimpleNamespace(id="vs_failed")),
+                file_batches=SimpleNamespace(
+                    create_and_poll=mock.Mock(
+                        return_value=SimpleNamespace(status="failed", file_counts={"failed": 1})
+                    )
+                ),
+            )
+        )
+        model.get_client = mock.Mock(return_value=client)
+
+        with self.assertRaisesRegex(ValueError, "could not finish indexing"):
+            model._create_vector_store(["file_bad"])

@@ -121,6 +121,28 @@ class SanitizedOpenAIResponses(OpenAIResponses):
         )
         return result.id
 
+    def _create_vector_store(self, file_ids: List[str]) -> str:
+        """Create a vector store and wait until every uploaded file is indexed.
+
+        Agno 2.3.2 polls ``vector_stores.files.list`` immediately and treats an
+        empty, eventually-consistent first response as completion. That lets the
+        next model call run before the PDFs are searchable. The SDK's batch
+        helper waits for the terminal indexing state instead.
+        """
+        vector_store = self.get_client().vector_stores.create(name=self.vector_store_name)
+        batch = self.get_client().vector_stores.file_batches.create_and_poll(
+            vector_store_id=vector_store.id,
+            file_ids=file_ids,
+            poll_interval_ms=500,
+        )
+        if getattr(batch, "status", None) != "completed":
+            counts = getattr(batch, "file_counts", None)
+            raise ValueError(
+                f"OpenAI could not finish indexing attached files (status={getattr(batch, 'status', None)}, "
+                f"file_counts={counts})."
+            )
+        return vector_store.id
+
     def _remember_usage_metrics(self, response: ModelResponse) -> None:
         usage = getattr(response, "response_usage", None)
         if usage is None:
