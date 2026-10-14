@@ -26,6 +26,7 @@ def build_test_attachment_tool_result(
     images = []
     files = []
     attachment_items = []
+    extracted_attachments = []
     loaded_attachment_ids = []
     unloaded_attachments = []
 
@@ -59,9 +60,35 @@ def build_test_attachment_tool_result(
             )
             continue
 
+        if extension == "pdf":
+            # Responses + Agno 2.3.2 turns content-backed files into a separate
+            # "Take note..." turn and can lose the document contents before
+            # the assistant's final response. Prefer Vania's existing local
+            # extractor for text PDFs and keep the raw-file path as a fallback
+            # for scanned/image-only PDFs.
+            from vania_core.tests_service import ClinicalTestsService
+
+            extracted = ClinicalTestsService.read_test_attachment_bundle(attachment)
+            extracted_text = (extracted.get("extracted_text") or "").strip()
+            if extracted.get("extraction_status") == "READY" and extracted_text:
+                loaded_attachment_ids.append(str(attachment.get("id") or ""))
+                attachment_items[-1]["inspection_mode"] = "extracted_text"
+                extracted_attachments.append(
+                    {
+                        "id": attachment.get("id"),
+                        "file_name": file_name,
+                        "content_type": content_type,
+                        "extraction_status": extracted.get("extraction_status"),
+                        "text_stats": extracted.get("text_stats") or {},
+                        "extracted_text": extracted_text,
+                    }
+                )
+                continue
+
         with default_storage.open(storage_path, "rb") as f:
             content = f.read()
         loaded_attachment_ids.append(str(attachment.get("id") or ""))
+        attachment_items[-1]["inspection_mode"] = "original_media"
 
         if content_type.startswith("image/"):
             images.append(
@@ -93,8 +120,11 @@ def build_test_attachment_tool_result(
         "attachments": attachment_items,
         "loaded_attachment_ids": loaded_attachment_ids,
         "unloaded_attachments": unloaded_attachments,
+        "extracted_attachments": extracted_attachments,
         "inspection_note": (
-            "Only attachments with loaded_into_context=true are available for direct inspection in this run. "
+            "Attachments under extracted_attachments were read locally and their extracted_text is available "
+            "for direct analysis in this run. Other attachments with loaded_into_context=true are available "
+            "as original media. "
             "Do not infer the contents of attachments listed under unloaded_attachments."
         ),
     }
