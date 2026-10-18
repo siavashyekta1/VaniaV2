@@ -306,6 +306,11 @@ CREDIT_PACKS = [
     ),
 ]
 
+# Legacy top-ups remain addressable for historical invoices, but the Stage
+# storefront now offers only the explicitly approved subscription catalog.
+for legacy_pack in CREDIT_PACKS:
+    legacy_pack.is_active = False
+
 ALL_PRODUCTS = PLAN_PRODUCTS + CREDIT_PACKS
 
 # --- 3. Discounts ---
