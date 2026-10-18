@@ -821,8 +821,18 @@ async def agui_chat_endpoint(
             selected_doctor_context.set(scope.get("expert_id"))
             selected_case_context.set(scope.get("case_id"))
             data["bound_case_scope"] = scope
+            data.update({
+                "visitor_id": scope.get("visitor_id"),
+                "patient_id": scope.get("visitor_id"),
+                "selected_expert_id": scope.get("expert_id"),
+                "selected_doctor_id": scope.get("expert_id"),
+                "selected_case_id": scope.get("case_id"),
+            })
+            if scope.get("case_id"):
+                data["selected_case_title"] = case.get("title")
             if session is None:
-                session = AgentSession(session_id=thread_id, user_id=str(user.id), session_data=data)
+                session = AgentSession(session_id=thread_id, user_id=str(user.id), session_data=data,
+                                       created_at=int(time.time()), updated_at=int(time.time()))
             else:
                 session.session_data = data
             if hasattr(storage, "upsert_session"):
