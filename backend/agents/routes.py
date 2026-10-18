@@ -795,11 +795,15 @@ async def agui_chat_endpoint(
         if service.audience == "EXPERT":
             from vania_core.case_service import CaseService
             data = dict(getattr(session, "session_data", None) or {})
-            saved_scope = data.get("bound_case_scope") or {
+            saved_scope = {
                 "visitor_id": data.get("visitor_id") or data.get("patient_id"),
                 "expert_id": data.get("selected_expert_id") or data.get("selected_doctor_id"),
                 "case_id": data.get("selected_case_id"),
             }
+            saved_scope.update({
+                key: value for key, value in (data.get("bound_case_scope") or {}).items()
+                if value not in (None, "")
+            })
             scope = resolve_thread_scope(saved_scope, {
                 "visitor_id": resource_context.get(),
                 "expert_id": selected_doctor_context.get(),
