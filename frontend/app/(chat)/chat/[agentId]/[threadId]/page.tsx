@@ -95,6 +95,7 @@ export default function ChatPage() {
   const optimisticAutoTitle = useRef<string | null>(null);
   const isLayoutTransitioning = useRef(false);
   const restoredContextRef = useRef<string | null>(null);
+  const syncedContextThreadRef = useRef<string | null>(null);
 
   const isDraft = threadId.startsWith("local-") && !isCreatedOnBackend;
   const isPendingPatientContextSwitch = Boolean(
@@ -127,8 +128,6 @@ export default function ChatPage() {
   // If we open a saved thread (not local) AND there is no patientId in the URL,
   // we check the backend to see if this thread belongs to a patient.
   useEffect(() => {
-    if (threadId.startsWith("local-")) return;
-
     const restoreKey = [
       threadId,
       patientId || "",
@@ -204,6 +203,12 @@ export default function ChatPage() {
   }, [threadId, patientId, doctorId, caseId, agentId, router, setActivePatient, searchParams]);
 
   useEffect(() => {
+    // A newly opened thread must hydrate its own scope before the previous
+    // thread's canvas/store selection is allowed to drive navigation.
+    if (syncedContextThreadRef.current !== threadId) {
+      syncedContextThreadRef.current = threadId;
+      return;
+    }
     const nextPatientId = contextResourceId || (patientId ? String(patientId) : null);
     const nextDoctorId = contextDoctorId || (doctorId ? String(doctorId) : null);
     const nextCaseId = contextCaseId ?? caseId ?? null;
