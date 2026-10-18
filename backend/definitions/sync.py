@@ -326,9 +326,15 @@ class DefinitionSync:
     def sync_faqs():
         logger.info(f"🔄 [Sync] FAQs: {len(FAQS)} items")
         for item in FAQS:
+            # Reuse the original FAQ row when its displayed question is renamed.
+            existing = None
+            if item.legacy_question and not FAQ.objects.filter(question=item.question).exists():
+                existing = FAQ.objects.filter(question=item.legacy_question).first()
+            lookup = {"pk": existing.pk} if existing else {"question": item.question}
             FAQ.objects.update_or_create(
-                question=item.question,
+                **lookup,
                 defaults={
+                    "question": item.question,
                     "answer": item.answer,
                     "category": item.category,
                     "order": item.order,

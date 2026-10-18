@@ -11,7 +11,7 @@ class PatientManagerCanvas(BaseCanvas):
     active tasks, and filled forms.
     """
     component_key = "VANIA_PATIENT_MANAGER"
-    name = "مدیریت بیمار"
+    name = "مدیریت مراجع"
     slug = "vania-patient-manager-v1"
     description = "A comprehensive dashboard for managing a specific visitor's case data."
 
