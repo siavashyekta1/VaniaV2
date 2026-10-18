@@ -221,7 +221,7 @@ export default function PatientManagerCanvas({ canvasId, data, onEdit, isLocked 
       <div className="flex h-full flex-col bg-background" dir="rtl">
         <div className="border-b border-border/40 bg-background/80 px-4 py-4 sm:px-6">
           <div className="space-y-1">
-            <h1 className="text-xl font-bold">مدیریت بیمار</h1>
+            <h1 className="text-xl font-bold">مدیریت مراجع</h1>
             <p className="text-xs text-muted-foreground">یک مراجع را انتخاب کنید.</p>
           </div>
         </div>
@@ -690,7 +690,7 @@ export default function PatientManagerCanvas({ canvasId, data, onEdit, isLocked 
               onOpenCase={handleCaseSelect}
               onEditProfile={() => setBaseInfoOpen(true)}
               canEditProfile={!!baseProfileDefinition}
-              emptyCasesText="هنوز پرونده‌ای برای این بیمار ساخته نشده است."
+              emptyCasesText="هنوز پرونده‌ای برای این مراجع ساخته نشده است."
               caseAction={
                 <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={openCreateDialog}>
                   <Plus className="h-3.5 w-3.5" />

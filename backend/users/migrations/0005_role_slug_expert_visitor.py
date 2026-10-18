@@ -42,7 +42,7 @@ def backwards(apps, schema_editor):
     try:
         patient = UserRole.objects.get(slug="visitor")
         patient.slug = "patient"
-        patient.name = "بیمار"
+        patient.name = "مراجع"
         patient.save(update_fields=["slug", "name"])
     except UserRole.DoesNotExist:
         pass
