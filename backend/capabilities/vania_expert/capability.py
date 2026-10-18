@@ -28,6 +28,7 @@ from vania_core.models import EsanjTestAccessRule
 from vania_core.esanj_serializers import user_can_access_esanj_rule
 
 from .forms import ALL_FORMS_LIST
+from .document_context import build_document_context
 
 logger = logging.getLogger(__name__)
 
@@ -265,6 +266,10 @@ Do not send localized or freeform values such as `کتاب`, `فیلم`, or `ش�
                 if selected_case
                 else []
             )
+            document_context = (
+                build_document_context(patient, storage_doctor_id, selected_case["id"], case_tests, case_files)
+                if selected_case else ""
+            )
             policy = get_policy_for_user(user)
             allowed_forms = filter_form_definitions(ALL_FORMS_LIST, getattr(getattr(user, "expert_profession", None), "slug", None))
             allowed_tests = filter_tests_catalog(TEST_CATALOG, getattr(getattr(user, "expert_profession", None), "slug", None))
@@ -293,6 +298,7 @@ Do not send localized or freeform values such as `کتاب`, `فیلم`, or `ش�
 - Case files visible to you: {len(case_files)}
 - Base profile is shared; all other forms/tests are private to the patient and the submitting expert.
 - Use file tools for document exploration instead of inferring from filenames.
+{document_context}
 
 ### AVAILABLE FORMS
 {chr(10).join([f"- `{f['key']}` | {f['title']}" for f in allowed_forms]) or "- No case forms available beyond shared base profile."}

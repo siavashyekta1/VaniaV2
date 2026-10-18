@@ -182,7 +182,9 @@ class UserWallet(models.Model):
     
     @property
     def is_plan_active(self):
-        return self.active_plan is not None
+        return self.active_plan is not None and (
+            self.plan_expires_at is None or self.plan_expires_at > timezone.now()
+        )
 
 
 class BillingProduct(models.Model):

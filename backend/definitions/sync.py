@@ -267,6 +267,11 @@ class DefinitionSync:
                 plan_obj.agents.set(agents)
 
         # 2. Sync Products
+        # Retain historical purchases/wallet relations but retire superseded offers.
+        SubscriptionPlan.objects.exclude(slug__in=slug_to_plan_map).update(is_active=False)
+        BillingProduct.objects.filter(linked_plan__isnull=False).exclude(
+            linked_plan__slug__in=slug_to_plan_map
+        ).update(is_active=False)
         for prod_def in ALL_PRODUCTS:
             linked_plan = None
             if prod_def.linked_plan_slug:

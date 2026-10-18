@@ -223,12 +223,15 @@ export default function ChatPage() {
     const query = new URLSearchParams(searchParams.toString());
 
     const isPatientContextSwitch = !!nextPatientId && nextPatientId !== currentPatientId;
+    const isCaseContextSwitch = !!currentCaseId && nextCaseId !== currentCaseId;
     const currentThreadAlreadyOwnsContext = !!currentPatientId || isCreatedOnBackend || !threadId.startsWith("local-");
 
-    if (isPatientContextSwitch && currentThreadAlreadyOwnsContext) {
+    if ((isPatientContextSwitch || isCaseContextSwitch) && currentThreadAlreadyOwnsContext) {
       const nextThreadId = `local-${crypto.randomUUID()}`;
       const nextQuery = new URLSearchParams();
-      nextQuery.set("visitorId", nextPatientId);
+      if (nextPatientId) nextQuery.set("visitorId", nextPatientId);
+      if (nextDoctorId) nextQuery.set("expertId", nextDoctorId);
+      if (nextCaseId) nextQuery.set("caseId", nextCaseId);
       router.push(`/chat/${agentId}/${nextThreadId}?${nextQuery.toString()}`);
       return;
     }
@@ -263,8 +266,10 @@ export default function ChatPage() {
     if (!patientId || doctorId) return;
     const localDoctor = localStorage.getItem(getExpertLocalKey(patientId)) || localStorage.getItem(getDoctorLocalKey(patientId));
     if (!localDoctor) return;
-    router.replace(`/chat/${agentId}/${threadId}?visitorId=${patientId}&expertId=${localDoctor}`);
-  }, [threadId, patientId, doctorId, agentId, router]);
+    const query = new URLSearchParams(searchParams.toString());
+    query.set("expertId", localDoctor);
+    router.replace(`/chat/${agentId}/${threadId}?${query.toString()}`);
+  }, [threadId, patientId, doctorId, agentId, router, searchParams]);
 
   useEffect(() => {
     if (!patientId || !doctorId) return;
@@ -675,6 +680,12 @@ export default function ChatPage() {
             </Button>
           )}
         </GlobalHeader>
+        {effectivePatientId && (
+          <div className="border-b bg-muted/40 px-4 py-2 text-xs" dir="rtl">
+            مراجع فعال: {activePatientName || patientManagerState?.patient_profile?.name || `شناسه ${effectivePatientId}`}
+            {" · "}پرونده: {selectedCase?.title || (effectiveCaseId ? effectiveCaseId : "انتخاب نشده")}
+          </div>
+        )}
 
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {isMobile ? (

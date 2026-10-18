@@ -37,6 +37,7 @@ export interface SubscriptionPlan {
   description: string;
   price: string;
   included_credits: string;
+  duration_days?: number;
   included_agents: string[]; // List of agent names/slugs unlocked
   included_agent_slugs?: string[];
   audience?: 'ALL' | 'VISITOR' | 'EXPERT';
@@ -54,6 +55,8 @@ export interface WalletInfo {
   
   // Plan Metadata (Flattened from UserWalletSerializer)
   active_plan_name?: string | null;
+  plan_expires_at?: string | null;
+  is_plan_active?: boolean;
   
   updated_at: string;
 }

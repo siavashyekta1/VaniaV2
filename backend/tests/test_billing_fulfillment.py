@@ -4,6 +4,8 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
+from django.utils import timezone
+from datetime import timedelta
 from billing.models import BillingProduct, Invoice, SubscriptionPlan, Transaction
 from billing.services import FulfillmentService, activate_default_expert_plan_for_transferred_credits
 from users.models import ExpertProfession, UserRole
@@ -44,7 +46,7 @@ class FulfillmentServicePlanCreditTests(TestCase):
         )
 
     @patch("billing.services.send_generic_sms.delay")
-    def test_same_plan_purchase_stacks_credits_without_expiry(self, _mock_sms):
+    def test_same_plan_purchase_stacks_credits_with_purchased_term(self, _mock_sms):
         plan, product = self._create_plan_product(
             slug="visitor-30d",
             name="Visitor 30D",
@@ -65,7 +67,7 @@ class FulfillmentServicePlanCreditTests(TestCase):
 
         self.assertEqual(self.wallet.active_plan_id, plan.id)
         self.assertEqual(self.wallet.balance_plan, Decimal("135.0000000000"))
-        self.assertIsNone(self.wallet.plan_expires_at)
+        self.assertAlmostEqual((self.wallet.plan_expires_at-timezone.now()).total_seconds(), 30*86400, delta=10)
         self.assertEqual(tx.amount, Decimal("100.0000000000"))
         self.assertIn("Added Credits To Plan", tx.description)
 
@@ -98,7 +100,7 @@ class FulfillmentServicePlanCreditTests(TestCase):
 
         self.assertEqual(self.wallet.active_plan_id, upgraded_plan.id)
         self.assertEqual(self.wallet.balance_plan, Decimal("290.0000000000"))
-        self.assertIsNone(self.wallet.plan_expires_at)
+        self.assertAlmostEqual((self.wallet.plan_expires_at-timezone.now()).total_seconds(), 30*86400, delta=10)
         self.assertEqual(tx.amount, Decimal("250.0000000000"))
         self.assertIn("Upgraded Plan", tx.description)
 
@@ -127,7 +129,7 @@ class FulfillmentServicePlanCreditTests(TestCase):
 
         self.assertEqual(self.wallet.active_plan_id, new_plan.id)
         self.assertEqual(self.wallet.balance_plan, Decimal("255.0000000000"))
-        self.assertIsNone(self.wallet.plan_expires_at)
+        self.assertAlmostEqual((self.wallet.plan_expires_at-timezone.now()).total_seconds(), 30*86400, delta=10)
 
     def test_visitor_upgrade_activates_matching_expert_bronze_without_granting_extra_credits(self):
         expert_role = UserRole.objects.create(slug="expert", name="متخصص")

@@ -183,6 +183,14 @@ async def _get_active_doctor(run_context: RunContext) -> CustomUser:
 
 async def _get_active_case(patient: CustomUser, doctor: CustomUser, requested_case_id: Optional[str] = None) -> Dict[str, Any]:
     requested_case_id = requested_case_id or selected_case_context.get()
+    if requested_case_id:
+        case = await sync_to_async(CaseService.get_accessible_case_for_expert)(patient, doctor, requested_case_id)
+        if not case:
+            raise ValueError("Selected case is unavailable for this visitor; select the correct case before continuing.")
+        return case
+    cases = await sync_to_async(CaseService.get_accessible_cases_for_expert)(patient, doctor)
+    if len(cases) > 1:
+        raise ValueError("Multiple cases are available; select the intended case before reading or editing case data.")
     return await sync_to_async(CaseService.get_or_create_selected_case_for_expert)(patient, doctor, requested_case_id)
 
 

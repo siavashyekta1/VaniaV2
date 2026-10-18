@@ -51,7 +51,7 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
         model = SubscriptionPlan
         fields = (
             'id', 'slug', 'name', 'description', 'price', 
-            'included_credits', 'included_agents', 'included_agent_slugs',
+            'included_credits', 'duration_days', 'included_agents', 'included_agent_slugs',
             'audience', 'eligible_expert_professions'
         )
 

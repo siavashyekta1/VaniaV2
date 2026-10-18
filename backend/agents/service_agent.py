@@ -400,7 +400,7 @@ class ServiceAgent(Agent):
             daily_limit = config.daily_free_credits
             wallet, _ = UserWallet.objects.get_or_create(user=self.user)
             
-            is_plan_active = wallet.active_plan is not None
+            is_plan_active = wallet.is_plan_active
             
             if is_plan_active:
                 available = wallet.balance_plan + wallet.balance_paid

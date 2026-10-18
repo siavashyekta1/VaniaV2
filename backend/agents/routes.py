@@ -21,6 +21,8 @@ from ag_ui.core import RunAgentInput
 # --- Project Imports ---
 from agents.auth import get_current_user
 from agents.factory import create_agent_for_service
+from agents.case_scope import resolve_thread_scope
+from agents.context import resource_context, selected_doctor_context, selected_case_context
 from users.models import CustomUser
 from billing.services import process_service_charge
 from billing.models import BillingConfig
@@ -790,6 +792,43 @@ async def agui_chat_endpoint(
 
         storage = get_storage()
         session = await sync_to_async(get_session_safe)(storage, thread_id, str(user.id))
+        if service.audience == "EXPERT":
+            from vania_core.case_service import CaseService
+            data = dict(getattr(session, "session_data", None) or {})
+            saved_scope = data.get("bound_case_scope") or {
+                "visitor_id": data.get("visitor_id") or data.get("patient_id"),
+                "expert_id": data.get("selected_expert_id") or data.get("selected_doctor_id"),
+                "case_id": data.get("selected_case_id"),
+            }
+            scope = resolve_thread_scope(saved_scope, {
+                "visitor_id": resource_context.get(),
+                "expert_id": selected_doctor_context.get(),
+                "case_id": selected_case_context.get(),
+            }, has_history=bool(getattr(session, "runs", None)))
+            if scope.get("case_id"):
+                if not scope.get("visitor_id"):
+                    raise HTTPException(409, "برای این پرونده ابتدا مراجع را انتخاب کنید.")
+                patient = await CustomUser.objects.aget(pk=scope["visitor_id"])
+                case = await sync_to_async(CaseService.get_accessible_case_for_expert)(
+                    patient, user, scope["case_id"]
+                )
+                if not case:
+                    raise HTTPException(403, "پرونده انتخاب‌شده برای این مراجع در دسترس نیست.")
+                if scope.get("expert_id") and str(case.get("doctor_id")) != scope["expert_id"]:
+                    raise HTTPException(409, "متخصص انتخاب‌شده با مالک پرونده مطابقت ندارد.")
+                scope["expert_id"] = str(case["doctor_id"])
+            resource_context.set(scope.get("visitor_id"))
+            selected_doctor_context.set(scope.get("expert_id"))
+            selected_case_context.set(scope.get("case_id"))
+            data["bound_case_scope"] = scope
+            if session is None:
+                session = AgentSession(session_id=thread_id, user_id=str(user.id), session_data=data)
+            else:
+                session.session_data = data
+            if hasattr(storage, "upsert_session"):
+                await sync_to_async(storage.upsert_session)(session=session)
+            else:
+                await sync_to_async(storage.upsert)(session=session)
         if session and input_data.messages:
             branch_messages = build_branch_history_messages(input_data.messages)
             if branch_messages:

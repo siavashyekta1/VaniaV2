@@ -223,6 +223,10 @@ export default function BillingPage() {
                             </CardHeader>
                             
                             <CardContent className="flex-1 space-y-5 relative">
+                                <p className="text-sm font-semibold">
+                                    {Number(plan.included_credits).toLocaleString("fa-IR")} سرمایه گفتگو برای کل دوره
+                                    {" · "}{plan.duration_days === 180 ? "شش‌ماهه" : "یک‌ماهه"}
+                                </p>
                                 <Separator className={isCurrent ? "bg-indigo-200 dark:bg-indigo-800/50" : ""} />
 
                                 <div className="space-y-3">
