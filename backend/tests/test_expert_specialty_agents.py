@@ -63,7 +63,7 @@ class ExpertSpecialtyAgentTests(TestCase):
             self.assertTrue(agent.requires_visitor_selector)
             self.assertEqual(agent.capabilities, ["vania_expert"])
             self.assertEqual(agent.default_open_canvases, ["VANIA_PATIENT_MANAGER"])
-            self.assertEqual(agent.model_id, "gpt-5.1")
+            self.assertEqual(agent.model_id, "gpt-5.4")
             self.assertEqual(agent.static_tools, ["duckduckgo"])
             self.assertTrue(agent.extra_config.get("has_canvas"))
 
@@ -103,10 +103,10 @@ class ExpertSpecialtyAgentTests(TestCase):
             )
 
         plan_expectations = {
-            "expert-lawyer-30d": "expert-lawyer-assistant",
-            "expert-psychiatrist-30d": "expert-psychiatrist-assistant",
-            "expert-psychologist-30d": "expert-psychologist-assistant",
-            "expert-general-doctor-30d": "expert-general-doctor-assistant",
+            "expert-lawyer-1500-30d": "expert-lawyer-assistant",
+            "expert-psychiatrist-1500-30d": "expert-psychiatrist-assistant",
+            "expert-psychologist-1500-30d": "expert-psychologist-assistant",
+            "expert-general_doctor-1500-30d": "expert-general-doctor-assistant",
         }
         for plan_slug, agent_slug in plan_expectations.items():
             plan = SubscriptionPlan.objects.get(slug=plan_slug)
@@ -114,7 +114,7 @@ class ExpertSpecialtyAgentTests(TestCase):
 
     def test_plan_definitions_reference_new_agents(self):
         plans_by_slug = {plan.slug: plan for plan in PLANS}
-        self.assertIn("expert-lawyer-assistant", plans_by_slug["expert-lawyer-30d"].included_agent_slugs)
-        self.assertIn("expert-psychiatrist-assistant", plans_by_slug["expert-psychiatrist-30d"].included_agent_slugs)
-        self.assertIn("expert-psychologist-assistant", plans_by_slug["expert-psychologist-30d"].included_agent_slugs)
-        self.assertIn("expert-general-doctor-assistant", plans_by_slug["expert-general-doctor-30d"].included_agent_slugs)
+        self.assertIn("expert-lawyer-assistant", plans_by_slug["expert-lawyer-1500-30d"].included_agent_slugs)
+        self.assertIn("expert-psychiatrist-assistant", plans_by_slug["expert-psychiatrist-1500-30d"].included_agent_slugs)
+        self.assertIn("expert-psychologist-assistant", plans_by_slug["expert-psychologist-1500-30d"].included_agent_slugs)
+        self.assertIn("expert-general-doctor-assistant", plans_by_slug["expert-general_doctor-1500-30d"].included_agent_slugs)

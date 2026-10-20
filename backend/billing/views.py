@@ -142,7 +142,7 @@ class TransactionHistoryView(generics.ListAPIView):
 class PurchaseDirectView(APIView):
     """
     Creates an Invoice for a BillingProduct (Plan or Credit Pack).
-    Payload: { "id": 123 }
+    Payload: { "id": 123, "extend_duration": false }
     """
     permission_classes = [IsAuthenticated]
 
@@ -160,9 +160,19 @@ class PurchaseDirectView(APIView):
         if product.linked_plan and not is_user_eligible_for_plan(request.user, product.linked_plan):
             return Response({"error": "You are not eligible to purchase this plan."}, status=status.HTTP_403_FORBIDDEN)
 
+        extend_duration = request.data.get('extend_duration', False)
+        if not isinstance(extend_duration, bool):
+            return Response({"error": "گزینه افزایش مدت باید بله یا خیر باشد."}, status=status.HTTP_400_BAD_REQUEST)
+        plan = product.linked_plan
+        if extend_duration and (not plan or plan.duration_days != 30):
+            return Response({"error": "افزایش مدت فقط برای اشتراک‌های یک‌ماهه امکان‌پذیر است."}, status=status.HTTP_400_BAD_REQUEST)
+        # Only the server determines the surcharge and purchased term.
+        extension_amount = Decimal('500000.00') if extend_duration else Decimal('0.00')
+        purchased_days = (plan.duration_days + (30 if extend_duration else 0)) if plan and plan.duration_days else None
+
         try:
             with transaction.atomic():
-                subtotal = quantize_money(product.price)
+                subtotal = quantize_money(product.price + extension_amount)
                 tax_amount = calculate_tax_amount(subtotal)
                 # Create a PENDING Invoice
                 invoice = Invoice.objects.create(
@@ -172,7 +182,9 @@ class PurchaseDirectView(APIView):
                     tax_rate=VAT_RATE,
                     tax_amount=tax_amount,
                     total_amount=subtotal + tax_amount,
-                    content_object=product
+                    content_object=product,
+                    subscription_duration_days=purchased_days,
+                    duration_extension_amount=extension_amount,
                 )
                 
                 return Response({

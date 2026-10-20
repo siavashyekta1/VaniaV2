@@ -7,6 +7,11 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // 2. The Currency Formatter (Added)
+export function formatExactCurrency(value: number | string | null | undefined): string {
+  const amount = Number(value ?? 0);
+  return `${(Number.isFinite(amount) ? amount : 0).toLocaleString(APP_CONFIG.ECONOMY.LOCALE, { maximumFractionDigits: 2 })} ${APP_CONFIG.ECONOMY.CURRENCY_SYMBOL}`;
+}
+
 export function formatCurrency(value: number | string | null | undefined): string {
   // 1. Safety & Parsing
   if (value === null || value === undefined || value === "") {

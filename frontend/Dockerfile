@@ -23,7 +23,7 @@ ARG NEXT_PUBLIC_API_URL
 # We set it as an ENV so Next.js build process can see it
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
-RUN pnpm run build
+RUN pnpm exec tsc --noEmit && pnpm run build
 
 FROM base AS runner
 WORKDIR /app
