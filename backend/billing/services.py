@@ -1,6 +1,8 @@
 # backend/billing/services.py
 import logging
 from decimal import Decimal
+from datetime import timedelta
+from django.utils import timezone
 from django.db import transaction
 from .utils import calculate_credit_cost 
 from .models import UserWallet, Transaction, BillingConfig, BillingProduct, Invoice, SubscriptionPlan
@@ -98,7 +100,7 @@ def process_usage_charge(user, input_tokens: int, output_tokens: int, run_id: st
         remaining_cost = cost
         deducted_total = Decimal("0")
         
-        is_plan_active = wallet.active_plan is not None
+        is_plan_active = wallet.is_plan_active
 
         if is_plan_active:
             # --- SCENARIO A: SUBSCRIBER ---
@@ -179,7 +181,7 @@ def process_service_charge(user, amount: Decimal, description: str) -> dict:
     with transaction.atomic():
         wallet, _ = UserWallet.objects.select_for_update().get_or_create(user=user)
         
-        is_plan_active = wallet.active_plan is not None
+        is_plan_active = wallet.is_plan_active
         
         # Calculate Total Available based on status
         if is_plan_active:
@@ -279,12 +281,17 @@ class FulfillmentService:
                 )
                 return
 
-            had_active_plan = wallet.active_plan is not None
+            had_active_plan = wallet.is_plan_active
             carried_plan_balance = wallet.balance_plan if had_active_plan else Decimal("0")
 
             same_plan = wallet.active_plan and wallet.active_plan.id == new_plan.id
             wallet.active_plan = new_plan
-            wallet.plan_expires_at = None
+            # New invoices snapshot their purchased term; legacy invoices retain the plan default.
+            duration_days = invoice.subscription_duration_days or new_plan.duration_days
+            wallet.plan_expires_at = (
+                timezone.now() + timedelta(days=duration_days)
+                if duration_days else None
+            )
             wallet.balance_plan = carried_plan_balance + new_plan.included_credits
             desc = (
                 f"Added Credits To Plan: {new_plan.name}"

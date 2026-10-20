@@ -77,7 +77,7 @@ class AccessControlService:
         except Exception:
             return False, "No wallet found"
 
-        if not wallet.active_plan:
+        if not wallet.is_plan_active:
             return False, "Plan required"
 
         # Rule 4: Bundle Inclusion
