@@ -4,8 +4,8 @@ x-base-environment:
   entrypoint:
     - /app/start.sh
   restart: always
-x-backend-image: &backend-image vaniaapp-backend:prod
-x-frontend-image: &frontend-image vaniaapp-frontend:prod
+x-backend-image: &backend-image vaniaapp-backend:main
+x-frontend-image: &frontend-image vaniaapp-frontend:main
 services:
   app:
     build:
