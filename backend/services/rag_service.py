@@ -32,7 +32,7 @@ def build_qdrant_knowledge(collection_name: str) -> Knowledge:
         collection=collection_name,
         url=settings.QDRANT_URL,
         api_key=settings.QDRANT_API_KEY,
-        embedder=OpenAIEmbedder(id="text-embedding-3-small", **get_agno_openai_kwargs()),
+        embedder=OpenAIEmbedder(id="text-embedding-3-small", **get_agno_openai_kwargs(for_embedder=True)),
     )
     return Knowledge(vector_db=vector_db)
 
@@ -46,7 +46,7 @@ def session_knowledge_exists(session_id: str) -> bool:
         collection=get_session_knowledge_collection_name(session_id),
         url=settings.QDRANT_URL,
         api_key=settings.QDRANT_API_KEY,
-        embedder=OpenAIEmbedder(id="text-embedding-3-small", **get_agno_openai_kwargs()),
+        embedder=OpenAIEmbedder(id="text-embedding-3-small", **get_agno_openai_kwargs(for_embedder=True)),
     )
     if not vector_db.exists():
         return False
@@ -224,7 +224,7 @@ class RAGIngestionService:
                 collection=collection_name,
                 url=settings.QDRANT_URL,
                 api_key=settings.QDRANT_API_KEY,
-                embedder=OpenAIEmbedder(id="text-embedding-3-small", **get_agno_openai_kwargs()),
+                embedder=OpenAIEmbedder(id="text-embedding-3-small", **get_agno_openai_kwargs(for_embedder=True)),
             )
 
             # 4. Initialize Knowledge
