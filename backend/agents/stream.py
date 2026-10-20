@@ -533,7 +533,6 @@ async def agui_stream_generator(
                             yield encoder.encode(TextMessageContentEvent(
                                 type=EventType.TEXT_MESSAGE_CONTENT, message_id=assistant_msg_id, delta=chunk
                             ))
-                            schedule_idle_output_complete()
                     continue
 
                 # --- CASE C: Standard Events ---
@@ -551,7 +550,6 @@ async def agui_stream_generator(
                             yield encoder.encode(TextMessageContentEvent(
                                 type=EventType.TEXT_MESSAGE_CONTENT, message_id=assistant_msg_id, delta=str(chunk.content)
                             ))
-                            schedule_idle_output_complete()
 
                 elif chunk.event == RunEvent.tool_call_started:
                     cancel_idle_output_complete_task()
@@ -607,7 +605,6 @@ async def agui_stream_generator(
                     
                     yield encoder.encode(ToolCallEndEvent(type=EventType.TOOL_CALL_END, tool_call_id=tc_id))
                     state["current_tool_id"] = None
-                    schedule_idle_output_complete()
 
         # --- Completion Logic ---
         if state["suppress_text_output"] and not state["tool_called"] and not state["always_suppress_text_output"]:
@@ -623,6 +620,20 @@ async def agui_stream_generator(
 
         if state["is_text_started"]:
             yield encoder.encode(TextMessageEndEvent(type=EventType.TEXT_MESSAGE_END, message_id=assistant_msg_id))
+
+        # This event changes the frontend's run state to completed. Emitting it
+        # during a pause between reasoning/tool calls causes later events to be
+        # ignored and leaves the UI out of sync. Emit it exactly once, only
+        # after the agent has actually finished producing output.
+        if not output_complete_emitted:
+            output_complete_emitted = True
+            yield encoder.encode(
+                AguiCustomEvent(
+                    type=EventType.CUSTOM,
+                    name="assistant_output_complete",
+                    value={"thread_id": thread_id, "run_id": run_id},
+                )
+            )
 
         if is_demo_user:
             try:

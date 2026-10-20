@@ -6,6 +6,7 @@ from django.core.cache import cache
 from .models import AgentService, ServiceSuggestion
 from .models_canvas import AgentCanvasConfig
 from users.eligibility import has_agent_access_override, is_staff_or_admin_user
+from core.ai_models import is_native_reasoning_model
 
 # --- SERVICE DISCOVERY SERIALIZERS ---
 
@@ -124,8 +125,7 @@ class ServiceSerializer(serializers.ModelSerializer):
     # [FIX] The get_quick_actions method has been completely removed.
 
     def get_reasoning_type(self, obj):
-        model = (obj.model_id or "").lower()
-        if any(m in model for m in ["gpt-5", "o1", "deepseek", "reasoner"]):
+        if is_native_reasoning_model(obj.model_id):
             return "NATIVE"
         if obj.enable_reasoning:
             return "HYBRID"
