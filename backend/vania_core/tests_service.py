@@ -14,6 +14,7 @@ from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 
 from openai import OpenAI
+from core.ai_provider import get_openai_transport_kwargs
 from pypdf import PdfReader
 
 from users.models import UserContextEntry
@@ -587,7 +588,7 @@ class ClinicalTestsService:
             with default_storage.open(storage_path, "rb") as f:
                 encoded = base64.b64encode(f.read()).decode("ascii")
             mime_type = content_type or mimetypes.guess_type(storage_path)[0] or "image/png"
-            client = OpenAI(api_key=api_key)
+            client = OpenAI(api_key=api_key, **get_openai_transport_kwargs())
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 temperature=0,
@@ -766,7 +767,7 @@ class ClinicalTestsService:
             return ""
 
         try:
-            client = OpenAI(api_key=api_key)
+            client = OpenAI(api_key=api_key, **get_openai_transport_kwargs())
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 temperature=0.2,

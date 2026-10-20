@@ -386,7 +386,7 @@ def create_agent_for_service(user, service_slug: str, session_id: str, request: 
                     collection=table_name,
                     url=settings.QDRANT_URL,
                     api_key=settings.QDRANT_API_KEY,
-                    embedder=OpenAIEmbedder(id="text-embedding-3-small", **get_agno_openai_kwargs()),
+                    embedder=OpenAIEmbedder(id="text-embedding-3-small", **get_agno_openai_kwargs(for_embedder=True)),
                 )
                 agent_knowledge = Knowledge(vector_db=vector_db)
             except Exception as e:
