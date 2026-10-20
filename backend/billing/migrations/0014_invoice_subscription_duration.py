@@ -4,7 +4,8 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [("billing", "0013_update_support_contact_details")]
+    # Bonyad has no support-contact data migration 0013; retain its own history.
+    dependencies = [("billing", "0012_alter_subscriptionplan_duration_days_and_more")]
 
     operations = [
         migrations.AddField(
