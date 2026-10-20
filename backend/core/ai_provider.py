@@ -3,6 +3,9 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Dict, Optional
+from urllib.parse import urlsplit
+
+from openai import AsyncOpenAI, DefaultAsyncHttpxClient, DefaultHttpxClient, OpenAI
 
 
 logger = logging.getLogger(__name__)
@@ -82,6 +85,33 @@ def get_ai_provider_config() -> AIProviderConfig:
     )
 
 
+@lru_cache(maxsize=4)
+def _get_proxy_sync_client(proxy_url: str):
+    return DefaultHttpxClient(proxy=proxy_url, trust_env=False, follow_redirects=False)
+
+
+@lru_cache(maxsize=4)
+def _get_proxy_async_client(proxy_url: str):
+    return DefaultAsyncHttpxClient(proxy=proxy_url, trust_env=False, follow_redirects=False)
+
+
+def get_openai_transport_kwargs(base_url: Optional[str] = None, *, asynchronous: bool = False) -> Dict[str, Any]:
+    """Apply the opt-in proxy only to the official OpenAI endpoint."""
+    proxy_url = (os.getenv("OPENAI_PROXY_URL") or "").strip()
+    target = urlsplit(base_url or DEFAULT_OPENAI_BASE_URL)
+    if not proxy_url or target.hostname != "api.openai.com":
+        return {}
+    proxy = urlsplit(proxy_url)
+    if proxy.scheme not in {"http", "https"} or not proxy.hostname:
+        raise ValueError("OPENAI_PROXY_URL must be an HTTP(S) proxy URL.")
+    factory = _get_proxy_async_client if asynchronous else _get_proxy_sync_client
+    client = factory(proxy_url)
+    if client.is_closed:
+        factory.cache_clear()
+        client = factory(proxy_url)
+    return {"http_client": client}
+
+
 def get_openai_client_kwargs() -> Dict[str, Any]:
     cfg = get_ai_provider_config()
     kwargs: Dict[str, Any] = {"api_key": cfg.api_key}
@@ -89,11 +119,30 @@ def get_openai_client_kwargs() -> Dict[str, Any]:
         kwargs["base_url"] = cfg.base_url
     if cfg.timeout is not None:
         kwargs["timeout"] = cfg.timeout
+    if cfg.provider == "openai":
+        kwargs.update(get_openai_transport_kwargs(cfg.base_url))
     return kwargs
 
 
-def get_agno_openai_kwargs() -> Dict[str, Any]:
-    return get_openai_client_kwargs()
+def get_agno_openai_kwargs(*, for_embedder: bool = False) -> Dict[str, Any]:
+    kwargs = get_openai_client_kwargs()
+    # Agno normally supplies its own global transports. Inject both SDK clients
+    # when proxying so synchronous tools and asynchronous streams use one route.
+    transport = kwargs.pop("http_client", None)
+    if transport is not None:
+        cfg = get_ai_provider_config()
+        sdk_kwargs = kwargs.copy()
+        kwargs["openai_client" if for_embedder else "client"] = OpenAI(
+            **sdk_kwargs, http_client=transport
+        )
+        kwargs["async_client"] = AsyncOpenAI(
+            **sdk_kwargs, **get_openai_transport_kwargs(cfg.base_url, asynchronous=True)
+        )
+    if for_embedder and "timeout" in kwargs:
+        timeout = kwargs.pop("timeout")
+        if transport is None:
+            kwargs["client_params"] = {"timeout": timeout}
+    return kwargs
 
 
 def get_transcription_model_id() -> str:
