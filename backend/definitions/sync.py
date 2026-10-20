@@ -17,7 +17,7 @@ from services.models_canvas import CanvasType, AgentCanvasConfig
 from vania_core.models import Location
 from users.models import ExpertProfession
 # --- Registries ---
-from .billing import ALL_PRODUCTS, DISCOUNTS, PLANS
+from .billing import ALL_PRODUCTS, DISCOUNTS, PLANS, LEGACY_PLAN_SLUGS
 from .agents import AGENTS
 
 from billing.models import BillingConfig, FAQ # [NEW] Import FAQ
@@ -240,6 +240,7 @@ class DefinitionSync:
                     )
 
     @staticmethod
+    @transaction.atomic
     def sync_plans_and_products():
         logger.info(f"🔄 [Sync] Plans & Products")
         
@@ -268,8 +269,8 @@ class DefinitionSync:
 
         # 2. Sync Products
         # Retain historical purchases/wallet relations but retire superseded offers.
-        SubscriptionPlan.objects.exclude(slug__in=slug_to_plan_map).update(is_active=False)
-        BillingProduct.objects.filter(linked_plan__isnull=False).exclude(
+        SubscriptionPlan.objects.filter(slug__in=LEGACY_PLAN_SLUGS).exclude(slug__in=slug_to_plan_map).update(is_active=False)
+        BillingProduct.objects.filter(linked_plan__slug__in=LEGACY_PLAN_SLUGS).exclude(
             linked_plan__slug__in=slug_to_plan_map
         ).update(is_active=False)
         for prod_def in ALL_PRODUCTS:

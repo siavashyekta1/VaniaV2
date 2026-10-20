@@ -169,6 +169,8 @@ export interface BillingProduct {
 }
 
 export interface Invoice {
+  subscription_duration_days?: number | null;
+  duration_extension_amount?: string;
   id: string;
   status: "PENDING" | "PAID" | "CANCELLED" | "WAITING" | "WAITING_APPROVAL";
   subtotal_amount?: string;

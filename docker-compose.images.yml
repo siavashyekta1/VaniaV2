@@ -6,7 +6,7 @@ x-base-environment:
   restart: always
 services:
   app:
-    image: 'vaniaapp-backend:prod'
+    image: 'vaniaapp-backend:stage-context-pricing'
     pull_policy: never
     env_file:
       - .env
@@ -35,7 +35,7 @@ services:
       minio:
         condition: service_started
   frontend:
-    image: 'vaniaapp-frontend:prod'
+    image: 'vaniaapp-frontend:stage-context-pricing'
     pull_policy: never
     container_name: vania_frontend
     environment:
@@ -48,7 +48,7 @@ services:
     depends_on:
       - app
   worker:
-    image: 'vaniaapp-backend:prod'
+    image: 'vaniaapp-backend:stage-context-pricing'
     pull_policy: never
     env_file:
       - .env
@@ -69,7 +69,7 @@ services:
       - cache
       - db
   beat:
-    image: 'vaniaapp-backend:prod'
+    image: 'vaniaapp-backend:stage-context-pricing'
     pull_policy: never
     env_file:
       - .env

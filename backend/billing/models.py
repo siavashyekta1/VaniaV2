@@ -275,6 +275,8 @@ class Invoice(models.Model):
     tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('10.00'))
     tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    subscription_duration_days = models.PositiveIntegerField(null=True, blank=True)
+    duration_extension_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     created_at = models.DateTimeField(auto_now_add=True)
     
     content_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, null=True)

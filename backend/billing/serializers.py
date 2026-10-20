@@ -87,7 +87,8 @@ class InvoiceSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'status', 'subtotal_amount', 'tax_rate', 'tax_amount', 'total_amount', 'created_at', 'formatted_date', 
             'item_name', 'item_description', 'user_name', 'user_phone',
-            'transaction_ref_id', 'card_number', 'authority', 'discount_amount'
+            'transaction_ref_id', 'card_number', 'authority', 'discount_amount',
+            'subscription_duration_days', 'duration_extension_amount'
         )
 
     def get_formatted_date(self, obj):
@@ -103,6 +104,8 @@ class InvoiceSerializer(serializers.ModelSerializer):
         return "Unknown Item"
 
     def get_item_description(self, obj):
+        if obj.duration_extension_amount > 0 and obj.subscription_duration_days:
+            return f"اشتراک با اعتبار {obj.subscription_duration_days} روز؛ شامل یک ماه فرصت بیشتر، بدون افزایش سرمایه گفتگو."
         if obj.content_object:
             if hasattr(obj.content_object, 'description'):
                 return getattr(obj.content_object, 'description', '')

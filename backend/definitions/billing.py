@@ -65,7 +65,7 @@ GENERAL_DOCTOR_PLAN_AGENT_SLUGS = _merge_agent_slugs(ALL_AUDIENCE_AGENT_SLUGS, G
 
 # --- 1. Subscription Plans ---
 # These define the tiers. Agents are linked here by their slugs.
-PLANS = [
+LEGACY_PLANS = [
     PlanDef(
         slug="visitor-30d",
         name="اشتراک عمومی برنزی",
@@ -230,7 +230,10 @@ PLANS = [
     ),
 ]
 
-# Stage pricing catalog: included credits cover the entire purchased term.
+# Retire only recognized previous offers; preserve independent organization plans.
+LEGACY_PLAN_SLUGS = {plan.slug for plan in LEGACY_PLANS} | {"visitor-25000-30d"}
+
+# Approved catalog: included credits cover the entire purchased term.
 PLANS = [
     PlanDef(
         slug=f"visitor-{credits}-30d", name=f"اشتراک عمومی {title}",
@@ -238,7 +241,7 @@ PLANS = [
         price=price, duration_days=30, monthly_credits=credits,
         included_agent_slugs=ALL_AUDIENCE_AGENT_SLUGS, audience="VISITOR",
     )
-    for credits, price, title in [(2500, 500000, "شروع"), (5000, 1299000, "پلاس"), (25000, 2999000, "پرکاربرد")]
+    for credits, price, title in [(2500, 500000, "شروع"), (5000, 1299000, "پلاس"), (18000, 2999000, "پرکاربرد")]
 ]
 for profession, label, agents in [
     ("lawyer", "وکلا", LAWYER_PLAN_AGENT_SLUGS),
@@ -306,8 +309,7 @@ CREDIT_PACKS = [
     ),
 ]
 
-# Legacy top-ups remain addressable for historical invoices, but the Stage
-# storefront now offers only the explicitly approved subscription catalog.
+# Legacy top-ups remain addressable for historical invoices but are no longer sold.
 for legacy_pack in CREDIT_PACKS:
     legacy_pack.is_active = False
 

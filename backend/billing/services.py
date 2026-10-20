@@ -286,9 +286,11 @@ class FulfillmentService:
 
             same_plan = wallet.active_plan and wallet.active_plan.id == new_plan.id
             wallet.active_plan = new_plan
+            # New invoices snapshot their purchased term; legacy invoices retain the plan default.
+            duration_days = invoice.subscription_duration_days or new_plan.duration_days
             wallet.plan_expires_at = (
-                timezone.now() + timedelta(days=new_plan.duration_days)
-                if new_plan.duration_days else None
+                timezone.now() + timedelta(days=duration_days)
+                if duration_days else None
             )
             wallet.balance_plan = carried_plan_balance + new_plan.included_credits
             desc = (

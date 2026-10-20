@@ -9,6 +9,10 @@ from datetime import timedelta
 from billing.models import BillingProduct, Invoice, SubscriptionPlan, Transaction
 from billing.services import FulfillmentService, activate_default_expert_plan_for_transferred_credits
 from users.models import ExpertProfession, UserRole
+from rest_framework.test import APIRequestFactory, force_authenticate
+from billing.views import PurchaseDirectView, ApplyDiscountView
+from billing.serializers import InvoiceSerializer
+from billing.models import DiscountCode
 
 
 class FulfillmentServicePlanCreditTests(TestCase):
@@ -44,6 +48,90 @@ class FulfillmentServicePlanCreditTests(TestCase):
             content_type=ContentType.objects.get_for_model(BillingProduct),
             object_id=product.id,
         )
+
+    @patch("billing.services.send_generic_sms.delay")
+    def test_extended_purchase_stores_server_price_and_fulfills_sixty_days_once(self, _mock_sms):
+        plan, product = self._create_plan_product(slug="extended", name="Extended", included_credits="2500")
+        product.price = Decimal("500000")
+        product.save()
+        request = APIRequestFactory().post("/purchase/", {
+            "id": product.id, "extend_duration": True,
+            "price": 1, "subscription_duration_days": 999,
+            "duration_extension_amount": 0,
+        }, format="json")
+        force_authenticate(request, user=self.user)
+        response = PurchaseDirectView.as_view()(request)
+        self.assertEqual(response.status_code, 201)
+        invoice = Invoice.objects.get(pk=response.data["invoice_id"])
+        self.assertEqual(invoice.subtotal_amount, Decimal("1000000"))
+        self.assertEqual(invoice.tax_amount, Decimal("100000"))
+        self.assertEqual(invoice.total_amount, Decimal("1100000"))
+        self.assertEqual(invoice.subscription_duration_days, 60)
+        self.assertEqual(invoice.duration_extension_amount, Decimal("500000"))
+        self.assertEqual(InvoiceSerializer(invoice).data["subscription_duration_days"], 60)
+        self.assertIn("60", InvoiceSerializer(invoice).data["item_description"])
+        # A later catalog edit must not change the term already invoiced.
+        plan.duration_days = 90
+        plan.save()
+        invoice.status = Invoice.Status.PAID
+        invoice.save()
+        FulfillmentService.execute(invoice)
+        FulfillmentService.execute(invoice)
+        self.wallet.refresh_from_db()
+        self.assertEqual(self.wallet.balance_plan, Decimal("2500"))
+        self.assertAlmostEqual((self.wallet.plan_expires_at - timezone.now()).total_seconds(), 60 * 86400, delta=10)
+
+    def test_default_purchase_keeps_original_price_and_term(self):
+        for days in [30, 180]:
+            with self.subTest(days=days):
+                _, product = self._create_plan_product(slug=f"normal-{days}", name="Normal", included_credits="100", duration_days=days)
+                request = APIRequestFactory().post("/purchase/", {"id": product.id}, format="json")
+                force_authenticate(request, user=self.user)
+                response = PurchaseDirectView.as_view()(request)
+                self.assertEqual(response.status_code, 201)
+                invoice = Invoice.objects.get(pk=response.data["invoice_id"])
+                self.assertEqual(invoice.total_amount, Decimal("1100"))
+                self.assertEqual(invoice.subscription_duration_days, days)
+                self.assertEqual(invoice.duration_extension_amount, 0)
+
+    def test_extension_rejects_non_monthly_products_and_invalid_boolean(self):
+        _, six_month = self._create_plan_product(slug="six-month", name="Six", included_credits="20000", duration_days=180)
+        topup = BillingProduct.objects.create(name="Topup", price=1000, credit_amount=10)
+        _, monthly = self._create_plan_product(slug="monthly", name="Monthly", included_credits="100")
+        for product, flag in [(six_month, True), (topup, True), (monthly, "false"), (monthly, 1), (monthly, None)]:
+            with self.subTest(product=product.id, flag=flag):
+                request = APIRequestFactory().post("/purchase/", {"id": product.id, "extend_duration": flag}, format="json")
+                force_authenticate(request, user=self.user)
+                response = PurchaseDirectView.as_view()(request)
+                self.assertEqual(response.status_code, 400)
+        self.assertFalse(Invoice.objects.exists())
+
+    def test_discount_preserves_extended_term_and_surcharge_in_subtotal(self):
+        _, product = self._create_plan_product(slug="discount-extended", name="Discount", included_credits="100")
+        request = APIRequestFactory().post("/purchase/", {"id": product.id, "extend_duration": True}, format="json")
+        force_authenticate(request, user=self.user)
+        response = PurchaseDirectView.as_view()(request)
+        invoice = Invoice.objects.get(pk=response.data["invoice_id"])
+        DiscountCode.objects.create(code="TEN", percent=10)
+        for _ in range(2):
+            request = APIRequestFactory().post("/discount/", {"code": "TEN"}, format="json")
+            force_authenticate(request, user=self.user)
+            response = ApplyDiscountView.as_view()(request, invoice_id=invoice.id)
+            self.assertEqual(response.status_code, 200)
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.subtotal_amount, Decimal("501000"))
+        self.assertEqual(invoice.total_amount, Decimal("495990"))
+        self.assertEqual(invoice.subscription_duration_days, 60)
+
+    @patch("billing.services.send_generic_sms.delay")
+    def test_six_month_plan_grants_total_credits_once_for_180_days(self, _mock_sms):
+        _, product = self._create_plan_product(slug="six-month-fulfill", name="Six months", included_credits="20000", duration_days=180)
+        invoice = self._create_paid_invoice(product)
+        FulfillmentService.execute(invoice)
+        FulfillmentService.execute(invoice)
+        self.wallet.refresh_from_db()
+        self.assertEqual(self.wallet.balance_plan, Decimal("20000"))
+        self.assertAlmostEqual((self.wallet.plan_expires_at - timezone.now()).total_seconds(), 180 * 86400, delta=10)
 
     @patch("billing.services.send_generic_sms.delay")
     def test_same_plan_purchase_stacks_credits_with_purchased_term(self, _mock_sms):

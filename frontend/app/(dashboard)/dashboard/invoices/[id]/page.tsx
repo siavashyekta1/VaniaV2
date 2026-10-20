@@ -21,7 +21,7 @@ import { ManualPaymentForm } from "@/components/billing/ManualPaymentForm";
 
 // --- Libs & Utilities ---
 import { API_BASE_URL, getAuthHeaders, ApiError } from "@/lib/api";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatExactCurrency as formatCurrency } from "@/lib/utils";
 import { Invoice } from "@/lib/types";
 import { APP_CONFIG } from "@/lib/config";
 
@@ -247,6 +247,12 @@ export default function InvoiceDetailPage() {
                         <div>
                             <p className="font-medium">{itemTitle}</p>
                             <p className="text-xs text-muted-foreground mt-1">{itemDesc}</p>
+                            {Number(invoice.duration_extension_amount) > 0 && (
+                              <div className="mt-3 rounded-xl bg-primary/5 p-3 text-sm space-y-1">
+                                <p>افزایش مدت به ۶۰ روز؛ بدون افزایش سرمایه گفتگو</p>
+                                <p className="text-xs text-muted-foreground">شامل {formatCurrency(invoice.duration_extension_amount!)} هزینه افزایش مدت در مبلغ فاکتور (پیش از مالیات)</p>
+                              </div>
+                            )}
                         </div>
                         <div className="text-left font-mono font-bold">
                             {formatCurrency(itemAmount)}
