@@ -2,7 +2,7 @@
 
 ## Scope
 
-Publish only billing/catalog, subscription UI, expiry enforcement, invoice duration options and their tests. Preserve each branch's AI routing, private egress, role rules and unrelated product work.
+Publish billing/catalog, subscription UI, expiry enforcement, invoice duration options and their tests. Following explicit user confirmation, also port Stage's validated model selection and Responses adapter. Preserve private egress, credentials, prompts, role rules and unrelated product work.
 
 The active Coolify applications are Stage (`codex/stage-context-pricing-verified`), main, bonyad and demo. `release` receives the code but currently has no separate running application. Archived/work branches are outside this rollout.
 
@@ -17,6 +17,17 @@ Prices are toman before 10% VAT. One conversation credit represents 2,000 combin
 - A 30-day purchase can include a server-priced 500,000-toman extension to 60 days, with unchanged credits. The invoice persists its purchased duration and surcharge.
 
 ## Safety and deployment
+
+Approved runtime model configuration (persist in Coolify, not just a container):
+
+```dotenv
+VANIA_CHAT_MODEL_OVERRIDE=gpt-6-luna
+VANIA_EXPERT_CHAT_MODEL_OVERRIDE=gpt-5.4-mini
+VANIA_EXPERT_RESPONSES_ENABLED=true
+VANIA_EXPERT_RESPONSES_REASONING_EFFORT=high
+```
+
+General Luna tool calling keeps Stage's Chat Completions `reasoning_effort=none` compatibility setting. Specialist mini uses Responses with high effort and `store=False`. Agent definitions and their prompts are not rewritten. This follows the official [Luna model contract](https://developers.openai.com/api/docs/models/gpt-6-luna) and [GPT-5.4 mini model contract](https://developers.openai.com/api/docs/models/gpt-5.4-mini).
 
 1. Back up each environment's database/configuration and retain exact running image IDs before publishing branch updates.
 2. Use environment-specific backend/frontend image tags; never share a mutable `prod` image tag across independent Coolify applications.
