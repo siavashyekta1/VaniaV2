@@ -44,7 +44,7 @@ export function WalletOverview({
   const totalPaidBalance = balancePlan + balancePaid;
 
   const planName = wallet?.active_plan_name;
-  const hasPlan = !!planName;
+  const hasPlan = !!planName && wallet?.is_plan_active !== false;
   return (
     <div className="w-full" dir="rtl">
       
@@ -81,7 +81,9 @@ export function WalletOverview({
                         </div>
 
                         <div className="inline-flex items-center self-start gap-2 bg-white/5 border border-white/5 px-3 py-1.5 rounded-lg text-xs text-zinc-400">
-                            <span>طرح شما فعال است و اعتبار آن در حساب شما باقی می‌ماند.</span>
+                            <span>{wallet?.plan_expires_at
+                              ? `پایان اعتبار: ${new Date(wallet.plan_expires_at).toLocaleDateString("fa-IR")}`
+                              : "اعتبار طرح قبلی شما بدون انقضا است."}</span>
                         </div>
                     </div>
 
