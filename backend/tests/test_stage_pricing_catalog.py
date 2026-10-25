@@ -2,7 +2,7 @@ from datetime import timedelta
 from unittest import TestCase
 from django.utils import timezone
 from billing.models import UserWallet
-from definitions.billing import PLANS
+from definitions.billing import PLANS, ALL_PRODUCTS
 from django.test import TestCase as DatabaseTestCase
 from definitions.sync import DefinitionSync
 from django.contrib.auth import get_user_model
@@ -67,6 +67,30 @@ class PublicLargeOfferSyncTests(DatabaseTestCase):
         self.assertTrue(self.product.is_active)
         self.assertFalse(SubscriptionPlan.objects.filter(slug="visitor-18000-30d").exists())
 
+    def test_50k_price_correction_preserves_existing_invoice_amount(self):
+        plan = SubscriptionPlan.objects.create(
+            slug="expert-lawyer-50000-180d", name="Existing 50k",
+            price=39880000, included_credits=50000, duration_days=180,
+            audience="EXPERT", eligible_expert_professions=["lawyer"],
+        )
+        product_name = next(p.name for p in ALL_PRODUCTS if p.linked_plan_slug == plan.slug)
+        product = BillingProduct.objects.create(name=product_name, price=39880000, linked_plan=plan)
+        invoice = Invoice.objects.create(
+            user=self.user, subtotal_amount=39880000, tax_amount=3988000,
+            total_amount=43868000, content_object=product,
+        )
+        DefinitionSync.sync_plans_and_products()
+        plan.refresh_from_db()
+        product.refresh_from_db()
+        invoice.refresh_from_db()
+        self.assertEqual(plan.price, 41880000)
+        self.assertEqual(product.price, 41880000)
+        self.assertEqual(plan.included_credits, 50000)
+        self.assertEqual(plan.duration_days, 180)
+        self.assertEqual(invoice.subtotal_amount, 39880000)
+        self.assertEqual(invoice.tax_amount, 3988000)
+        self.assertEqual(invoice.total_amount, 43868000)
+
 
 class StagePricingTests(TestCase):
     def test_catalog_quantities_prices_and_total_term_credits(self):
@@ -78,7 +102,7 @@ class StagePricingTests(TestCase):
         expert = [p for p in PLANS if p.audience == "EXPERT"]
         self.assertEqual(len(expert), 28)
         six = [p for p in expert if p.duration_days == 180]
-        self.assertEqual({(p.monthly_credits, p.price) for p in six}, {(20000,18880000),(30000,26880000),(40000,33880000),(50000,39880000)})
+        self.assertEqual({(p.monthly_credits, p.price) for p in six}, {(20000,18880000),(30000,26880000),(40000,33880000),(50000,41880000)})
 
     def test_expired_wallet_is_not_active(self):
         wallet = UserWallet(active_plan_id=1, plan_expires_at=timezone.now()-timedelta(seconds=1))
