@@ -10,7 +10,7 @@ The active Coolify applications are Stage (`codex/stage-context-pricing-verified
 
 Prices are toman before 10% VAT. One conversation credit represents 2,000 combined input/output tokens.
 
-- Public, 30 days: 2,500 / 500,000; 5,000 / 1,299,000; 18,000 / 2,999,000.
+- Public, 30 days: 2,500 / 500,000; 5,000 / 950,000; 18,000 / 2,999,000.
 - Each eligible expert profession, 30 days: 1,500 / 1,490,000; 3,000 / 2,990,000; 6,000 / 5,590,000.
 - Each eligible expert profession, 180 days: 20,000 / 18,880,000; 30,000 / 26,880,000; 40,000 / 33,880,000; 50,000 / 41,880,000.
 - Credits cover the complete purchased term, not a recurring monthly grant.
