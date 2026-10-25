@@ -241,7 +241,7 @@ PLANS = [
         price=price, duration_days=30, monthly_credits=credits,
         included_agent_slugs=ALL_AUDIENCE_AGENT_SLUGS, audience="VISITOR",
     )
-    for credits, price, title in [(2500, 500000, "شروع"), (5000, 1299000, "پلاس"), (18000, 2999000, "پرکاربرد")]
+    for credits, price, title in [(2500, 500000, "شروع"), (5000, 950000, "پلاس"), (18000, 2999000, "پرکاربرد")]
 ]
 for profession, label, agents in [
     ("lawyer", "وکلا", LAWYER_PLAN_AGENT_SLUGS),

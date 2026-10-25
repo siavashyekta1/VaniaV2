@@ -92,10 +92,34 @@ class PublicLargeOfferSyncTests(DatabaseTestCase):
         self.assertEqual(invoice.total_amount, 43868000)
 
 
+    def test_public_5k_price_correction_preserves_existing_invoice_amount(self):
+        plan = SubscriptionPlan.objects.create(
+            slug="visitor-5000-30d", name="Existing public 5k",
+            price=1299000, included_credits=5000, duration_days=30, audience="VISITOR",
+        )
+        product_name = next(p.name for p in ALL_PRODUCTS if p.linked_plan_slug == plan.slug)
+        product = BillingProduct.objects.create(name=product_name, price=1299000, linked_plan=plan)
+        invoice = Invoice.objects.create(
+            user=self.user, subtotal_amount=1299000, tax_amount=129900,
+            total_amount=1428900, content_object=product,
+        )
+        DefinitionSync.sync_plans_and_products()
+        plan.refresh_from_db()
+        product.refresh_from_db()
+        invoice.refresh_from_db()
+        self.assertEqual(plan.price, 950000)
+        self.assertEqual(product.price, 950000)
+        self.assertEqual(plan.included_credits, 5000)
+        self.assertEqual(plan.duration_days, 30)
+        self.assertEqual(invoice.subtotal_amount, 1299000)
+        self.assertEqual(invoice.tax_amount, 129900)
+        self.assertEqual(invoice.total_amount, 1428900)
+
+
 class StagePricingTests(TestCase):
     def test_catalog_quantities_prices_and_total_term_credits(self):
         visitor = [(p.monthly_credits, p.price, p.duration_days) for p in PLANS if p.audience == "VISITOR"]
-        self.assertEqual(visitor, [(2500, 500000, 30), (5000, 1299000, 30), (18000, 2999000, 30)])
+        self.assertEqual(visitor, [(2500, 500000, 30), (5000, 950000, 30), (18000, 2999000, 30)])
         public_large = next(p for p in PLANS if p.slug == "visitor-18000-30d")
         self.assertIn("36,000,000", public_large.description)
         self.assertFalse(any(p.slug == "visitor-25000-30d" for p in PLANS))
