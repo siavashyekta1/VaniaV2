@@ -1,6 +1,7 @@
 import logging
 from datetime import date, timedelta
 from django.utils import timezone
+from pydantic import ValidationError
 from users.services import user_context_manager
 from users.models import UserContextEntry
 from .schemas import TherapyRoadmap, TherapyPhase, RoadmapSession
@@ -8,6 +9,11 @@ from .context_scope import migrate_legacy_to_scoped_once, migrate_doctor_scoped_
 from .case_service import build_case_scoped_key
 
 logger = logging.getLogger(__name__)
+
+
+class RoadmapDataError(ValueError):
+    """Stored roadmap is invalid; callers must not replace it with an empty plan."""
+
 
 class RoadmapService:
     CONTEXT_KEY = "therapy_roadmap"
@@ -51,28 +57,40 @@ class RoadmapService:
         try:
             # Parse existing JSON into Pydantic
             return TherapyRoadmap(**entry.data)
-        except Exception as e:
-            logger.error(f"Schema mismatch in Roadmap for user {patient.id}: {e}")
-            return default_roadmap
+        except ValidationError as exc:
+            logger.error("Invalid roadmap entry %s for user %s", entry.id, patient.id)
+            raise RoadmapDataError(
+                f"Roadmap entry {entry.id} is invalid; existing data was preserved."
+            ) from exc
 
     @staticmethod
     def save_roadmap(patient, roadmap_model: TherapyRoadmap, doctor_id=None, case_id=None, creator=None):
         """
         Saves the Pydantic model back to the DB.
         """
+        # Revalidate nested/in-place changes too, before archiving any stored data.
+        validated_roadmap = TherapyRoadmap.model_validate(roadmap_model.model_dump())
         key = build_case_scoped_key(RoadmapService.CONTEXT_KEY, doctor_id, case_id) if doctor_id and case_id else build_scoped_key(RoadmapService.CONTEXT_KEY, doctor_id) if doctor_id else RoadmapService.CONTEXT_KEY
         # Keep roadmap writes aligned with the singleton context pattern used by other
         # case-scoped services so refreshes always read the latest authoritative record.
-        roadmap_model.updated_at = timezone.now().isoformat()
-        if not getattr(roadmap_model, "created_at", None):
-            roadmap_model.created_at = roadmap_model.updated_at
+        validated_roadmap.updated_at = timezone.now().isoformat()
+        if not validated_roadmap.created_at:
+            validated_roadmap.created_at = validated_roadmap.updated_at
+        roadmap_model.updated_at = validated_roadmap.updated_at
+        roadmap_model.created_at = validated_roadmap.created_at
         user_context_manager.set_singleton_context(
             user=patient,
             key=key,
-            data=roadmap_model.model_dump(),
+            data=validated_roadmap.model_dump(),
             source=UserContextEntry.SourceType.AGENT if creator else UserContextEntry.SourceType.SYSTEM,
             creator=creator,
         )
+
+    @staticmethod
+    def update_strategy(patient, approaches, doctor_id=None, case_id=None):
+        roadmap = RoadmapService.get_or_create_roadmap(patient, doctor_id=doctor_id, case_id=case_id)
+        roadmap.treatment_approaches = approaches
+        RoadmapService.save_roadmap(patient, roadmap, doctor_id=doctor_id, case_id=case_id)
 
     @staticmethod
     def update_phase(patient, phase: TherapyPhase, doctor_id=None, case_id=None):

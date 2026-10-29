@@ -873,9 +873,13 @@ async def manage_roadmap(run_context: RunContext, action: str, data: Dict[str, A
             active_case["id"],
         )
     elif action_key == "UPDATE_STRATEGY":
-        roadmap = await sync_to_async(RoadmapService.get_or_create_roadmap)(patient, doctor_id, active_case["id"])
-        roadmap.treatment_approaches = data.get("approaches", [])
-        await sync_to_async(RoadmapService.save_roadmap)(patient, roadmap, doctor_id, active_case["id"])
+        try:
+            await sync_to_async(RoadmapService.update_strategy)(
+                patient, data.get("approaches", []), doctor_id, active_case["id"]
+            )
+        except ValueError:
+            yield "❌ به‌روزرسانی رویکردها انجام نشد؛ ساختار داده معتبر نیست و اطلاعات قبلی حفظ شد."
+            return
     elif action_key == "SET_ACTIVE_SESSION":
         session_number = data.get("session_number")
         if session_number is None:

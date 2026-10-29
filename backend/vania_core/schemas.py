@@ -1,7 +1,7 @@
 # backend/vania_core/schemas.py
 from typing import List, Optional, Dict, Any
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from datetime import datetime
 
 # ==============================================================================
@@ -97,6 +97,23 @@ class TherapyRoadmap(BaseModel):
     The singleton Pydantic model for the `therapy_roadmap` context key.
     This is the master plan for the entire treatment.
     """
+    model_config = ConfigDict(validate_assignment=True)
+
+    @field_validator("treatment_approaches", mode="before")
+    @classmethod
+    def normalize_treatment_approaches(cls, value):
+        # Older tool calls stored a single approach as text. Preserve that text
+        # as one item rather than rejecting the entire session history.
+        if isinstance(value, str):
+            value = [value] if value.strip() else []
+        if isinstance(value, list):
+            return [
+                item.strip() if isinstance(item, str) else item
+                for item in value
+                if not isinstance(item, str) or item.strip()
+            ]
+        return value
+
     current_phase: TherapyPhase = TherapyPhase.PHASE_1_ANALYSIS
     treatment_approaches: List[str] = Field(default_factory=list, description="List of approaches selected by the doctor in Phase 3.")
     sessions: List[RoadmapSession] = Field(default_factory=list)
