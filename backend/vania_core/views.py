@@ -16,6 +16,7 @@ from django.urls import reverse
 from rest_framework import generics, status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 import json
 from typing import Optional
@@ -261,10 +262,15 @@ class DoctorPatientLookupView(APIView):
             "activation_locked": False,
         })
 
+class ExpertDirectoryPagination(PageNumberPagination):
+    page_size = 24
+
+
 class PublicDoctorListView(generics.ListAPIView):
     """Provides a list of public doctor profiles for the 'Find a Doctor' directory."""
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = PublicDoctorSerializer
+    pagination_class = ExpertDirectoryPagination
 
     def filter_queryset(self, queryset):
         queryset = super().filter_queryset(queryset)
@@ -275,7 +281,9 @@ class PublicDoctorListView(generics.ListAPIView):
         return queryset.filter(pk__in=complete_profile_ids)
     
     def get_queryset(self):
-        queryset = DoctorProfile.objects.filter(is_public=True).select_related('user', 'location')
+        queryset = DoctorProfile.objects.filter(is_public=True).select_related(
+            'user', 'user__expert_profession', 'location'
+        ).order_by('user__full_name', 'pk')
         
         specialty = self.request.query_params.get('specialty')
         profession = self.request.query_params.get('profession') or self.request.query_params.get('expert_profession')

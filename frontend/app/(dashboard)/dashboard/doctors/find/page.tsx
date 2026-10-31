@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { 
   Search, 
@@ -77,6 +77,8 @@ const TEENS = ["ده", "یازده", "دوازده", "سیزده", "چهارده
 const TENS = ["", "", "بیست", "سی", "چهل", "پنجاه", "شصت", "هفتاد", "هشتاد", "نود"];
 const HUNDREDS = ["", "صد", "دویست", "سیصد", "چهارصد", "پانصد", "ششصد", "هفتصد", "هشتصد", "نهصد"];
 const EN_NUMBER_FORMATTER = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+const DIRECTORY_PAGE_SIZE = 24;
+const FA_NUMBER_FORMATTER = new Intl.NumberFormat("fa-IR");
 
 function tripletToPersianWords(num: number): string {
   if (num === 0) return "";
@@ -142,6 +144,17 @@ export default function FindDoctorPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [hasPreviousPage, setHasPreviousPage] = useState(false);
+  const totalPages = Math.max(1, Math.ceil(totalCount / DIRECTORY_PAGE_SIZE));
+  const resultsRef = useRef<HTMLDivElement>(null);
+
+  const goToPage = (nextPage: number) => {
+    setPage(nextPage);
+    resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   
   const [search, setSearch] = useState("");
   const [locations, setLocations] = useState<Location[]>([]);
@@ -179,42 +192,58 @@ export default function FindDoctorPage() {
       .catch(() => setProfessionOptions([]));
   }, []);
 
-  // Fetch Doctors
-  const fetchDoctors = async () => {
+  // Cancel older searches so their responses cannot overwrite the current page.
+  useEffect(() => {
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
-    try {
-      const params = new URLSearchParams();
-      if (search) params.append("search", search);
-      selectedLocationIds.forEach(id => {
-          params.append("locations", String(id));
-      });
-      if (selectedProfession && selectedProfession !== "ALL") {
-        params.append("profession", selectedProfession);
-      }
+    const fetchDoctors = async () => {
+      try {
+        const params = new URLSearchParams();
+        params.set("page", String(page));
+        if (search) params.append("search", search);
+        selectedLocationIds.forEach(id => {
+            params.append("locations", String(id));
+        });
+        if (selectedProfession && selectedProfession !== "ALL") {
+          params.append("profession", selectedProfession);
+        }
 
-      const res = await fetch(`${API_BASE_URL}/api/vania/experts/?${params.toString()}`, {
-        headers: getAuthHeaders()
-      });
-      if (!res.ok) throw new Error("Failed to fetch doctors list.");
+        const res = await fetch(`${API_BASE_URL}/api/vania/experts/?${params.toString()}`, {
+          headers: getAuthHeaders(),
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        if (res.status === 404 && page > 1) {
+          setPage(1);
+          return;
+        }
+        if (!res.ok) throw new Error("Failed to fetch doctors list.");
       
-      const data = await res.json();
-      const list = Array.isArray(data) ? data : data.results || [];
-      setDoctors(list);
-    } catch (e: any) {
-      console.error(e);
-      setError("خطا در دریافت لیست متخصصین");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : data.results || [];
+        if (controller.signal.aborted) return;
+        setDoctors(list);
+        setTotalCount(Array.isArray(data) ? list.length : data.count ?? list.length);
+        setHasNextPage(!Array.isArray(data) && Boolean(data.next));
+        setHasPreviousPage(!Array.isArray(data) && Boolean(data.previous));
+      } catch (e: any) {
+        if (controller.signal.aborted) return;
+        console.error(e);
+        setError("خطا در دریافت لیست متخصصین");
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    };
     const timer = setTimeout(fetchDoctors, 300);
-    return () => clearTimeout(timer);
-  }, [search, selectedLocationIds, selectedProfession]);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [search, selectedLocationIds, selectedProfession, page]);
 
   const toggleLocation = (id: number) => {
+    setPage(1);
     setSelectedLocationIds(prev => 
         prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
@@ -282,11 +311,11 @@ export default function FindDoctorPage() {
               placeholder="جستجوی نام متخصص یا تخصص..." 
               className="pr-9 bg-background"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             />
         </div>
 
-        <Select value={selectedProfession} onValueChange={setSelectedProfession}>
+        <Select value={selectedProfession} onValueChange={(value) => { setSelectedProfession(value); setPage(1); }}>
           <SelectTrigger className="w-full md:w-[220px]">
             <SelectValue placeholder="حوزه تخصصی" />
           </SelectTrigger>
@@ -374,7 +403,7 @@ export default function FindDoctorPage() {
                                 <Separator />
                                 <CommandGroup>
                                     <CommandItem
-                                        onSelect={() => setSelectedLocationIds([])}
+                                        onSelect={() => { setSelectedLocationIds([]); setPage(1); }}
                                         className="justify-center text-center cursor-pointer font-medium text-destructive"
                                     >
                                         پاک کردن فیلترها
@@ -389,6 +418,7 @@ export default function FindDoctorPage() {
       </div>
 
       {/* Content Area */}
+      <div ref={resultsRef} className="scroll-mt-4" />
       {loading ? (
         <div className="h-40 flex items-center justify-center text-muted-foreground gap-2">
             <Loader2 className="h-6 w-6 animate-spin" /> در حال جستجو...
@@ -490,6 +520,25 @@ export default function FindDoctorPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {!error && totalCount > 0 && (
+        <nav aria-label="صفحه‌بندی متخصصان" className="flex flex-col items-center justify-between gap-4 sm:flex-row">
+          <p className="text-sm text-muted-foreground" aria-live="polite">
+            {loading ? "در حال دریافت نتایج..." : `نمایش ${FA_NUMBER_FORMATTER.format((page - 1) * DIRECTORY_PAGE_SIZE + 1)} تا ${FA_NUMBER_FORMATTER.format(Math.min(page * DIRECTORY_PAGE_SIZE, totalCount))} از ${FA_NUMBER_FORMATTER.format(totalCount)} متخصص`}
+          </p>
+          <div className="flex items-center gap-3">
+            <Button variant="outline" disabled={loading || !hasPreviousPage} onClick={() => goToPage(Math.max(1, page - 1))}>
+              قبلی
+            </Button>
+            <span className="text-sm" aria-current="page">
+              صفحهٔ {FA_NUMBER_FORMATTER.format(page)} از {FA_NUMBER_FORMATTER.format(totalPages)}
+            </span>
+            <Button variant="outline" disabled={loading || !hasNextPage} onClick={() => goToPage(page + 1)}>
+              بعدی
+            </Button>
+          </div>
+        </nav>
       )}
 
       {/* --- Request Modal --- */}

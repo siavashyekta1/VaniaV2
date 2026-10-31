@@ -1,7 +1,7 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from users.models import CustomUser, UserRole
+from users.models import CustomUser, ExpertProfession, UserRole
 from vania_core.models import DoctorProfile, Location
 
 
@@ -110,3 +110,60 @@ class PublicDoctorProfileTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.expert.doctor_profile.refresh_from_db()
         self.assertTrue(self.expert.doctor_profile.is_public)
+
+    def test_directory_paginates_all_complete_profiles_without_duplicates(self):
+        psychologist = ExpertProfession.objects.create(slug="psychologist", name="روانشناس")
+        lawyer = ExpertProfession.objects.create(slug="lawyer", name="وکیل")
+        for index in range(31):
+            user = CustomUser.objects.create_user(
+                phone_number=f"0912010{index:04d}",
+                full_name=f"متخصص {index:02d}",
+                role=self.expert_role,
+                is_expert_verified=True,
+                expert_profession=psychologist if index % 2 == 0 else lawyer,
+            )
+            DoctorProfile.objects.create(
+                user=user, is_public=True, specialty="روانشناس بالینی",
+                location=self.location, clinic_address="تهران، خیابان ولیعصر",
+                bio="من در حوزه سلامت روان بزرگسالان فعالیت می‌کنم.",
+            )
+        # Hidden and incomplete profiles must not affect the count or consume a slot.
+        DoctorProfile.objects.create(user=self.expert, is_public=True, specialty="ناقص")
+        hidden = CustomUser.objects.create_user(
+            phone_number="09120109999", full_name="متخصص پنهان", role=self.expert_role,
+        )
+        DoctorProfile.objects.create(
+            user=hidden, is_public=False, specialty="روانشناس بالینی",
+            location=self.location, clinic_address="تهران، خیابان ولیعصر",
+            bio="من در حوزه سلامت روان بزرگسالان فعالیت می‌کنم.",
+        )
+        self.client.force_authenticate(self.viewer)
+        first = self.client.get("/api/vania/experts/")
+        second = self.client.get("/api/vania/experts/", {"page": 2})
+        alias = self.client.get("/api/vania/doctors/", {"page": 2})
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.data["count"], 31)
+        self.assertEqual(len(first.data["results"]), 24)
+        self.assertEqual(len(second.data["results"]), 7)
+        self.assertIsNotNone(first.data["next"])
+        self.assertIsNone(first.data["previous"])
+        self.assertIsNone(second.data["next"])
+        self.assertIsNotNone(second.data["previous"])
+        first_ids = {item["id"] for item in first.data["results"]}
+        second_ids = {item["id"] for item in second.data["results"]}
+        self.assertFalse(first_ids & second_ids)
+        self.assertEqual(len(first_ids | second_ids), 31)
+        self.assertEqual(alias.data["results"], second.data["results"])
+        filtered = self.client.get("/api/vania/experts/", {"search": "متخصص 30", "locations": self.location.id})
+        self.assertEqual(filtered.data["count"], 1)
+        self.assertEqual(len(filtered.data["results"]), 1)
+        self.assertIsNone(filtered.data["next"])
+        profession_filtered = self.client.get("/api/vania/experts/", {"profession": "psychologist"})
+        self.assertEqual(profession_filtered.data["count"], 16)
+        self.assertTrue(all(item["expert_profession_slug"] == "psychologist" for item in profession_filtered.data["results"]))
+
+    def test_directory_requires_authentication_and_rejects_missing_pages(self):
+        self.assertEqual(self.client.get("/api/vania/experts/").status_code, 401)
+        self.client.force_authenticate(self.viewer)
+        self.assertEqual(self.client.get("/api/vania/experts/", {"page": 999}).status_code, 404)
